@@ -5,6 +5,7 @@ let typingTimeout = null;
 let isTyping = false;
 let pollTimer = null;
 let lastMessageId = 0;
+let videoCall = null;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -80,6 +81,8 @@ loginForm.addEventListener('submit', async (e) => {
 
 $('#logoutBtn').addEventListener('click', () => {
   stopPolling();
+  videoCall?.cleanup();
+  videoCall = null;
   localStorage.removeItem('chat_token');
   localStorage.removeItem('chat_user');
   currentUser = null;
@@ -98,8 +101,22 @@ function showChat() {
   avatar.style.background = currentUser.avatar_color;
   $('#userDisplayName').textContent = currentUser.display_name;
 
+  videoCall = new VideoCallManager({
+    currentUser,
+    sendSignal: async (to, type, data) => {
+      await fetch(API + '/call-signal.php', {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, type, data })
+      });
+    }
+  });
+
   loadMessages().then(() => startPolling());
 }
+
+window.onVideoCallStart = () => startPolling();
+window.onVideoCallEnd = () => startPolling();
 
 async function loadMessages() {
   try {
@@ -117,7 +134,8 @@ async function loadMessages() {
 
 function startPolling() {
   stopPolling();
-  pollTimer = setInterval(poll, 2000);
+  const interval = videoCall?.inCall ? 800 : 2000;
+  pollTimer = setInterval(poll, interval);
 }
 
 function stopPolling() {
@@ -151,6 +169,21 @@ async function poll() {
     }
 
     onlineCount.textContent = (data.online || 0) + ' online';
+
+    if (videoCall) {
+      videoCall.setOnlineUsers(data.online_users || []);
+      if (data.call_signals?.length) {
+        data.call_signals.forEach(sig => {
+          videoCall.handleSignal({
+            from: sig.from,
+            from_name: sig.from_name,
+            from_color: sig.from_color,
+            type: sig.type,
+            data: sig.data
+          });
+        });
+      }
+    }
   } catch (err) {
     console.error('Poll error:', err);
   }

@@ -23,5 +23,7 @@ jsonResponse([
     'messages' => $newMessages,
     'deleted' => $db->getDeletedMessageIds(),
     'typing' => $typing,
-    'online' => $db->getOnlineCount()
+    'online' => $db->getOnlineCount(),
+    'online_users' => $db->getOnlineUsers($user['id']),
+    'call_signals' => $db->pullCallSignals($user['id'])
 ]);

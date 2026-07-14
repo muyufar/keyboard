@@ -190,7 +190,7 @@ app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
 });
 
 app.get('/api/online', authMiddleware, (req, res) => {
-  res.json({ count: onlineUsers.size });
+  res.json({ count: onlineUsers.size, users: getOnlineUsersList(req.user.id) });
 });
 
 app.delete('/api/messages/:id', authMiddleware, (req, res) => {
@@ -209,7 +209,30 @@ app.delete('/api/messages/:id', authMiddleware, (req, res) => {
 });
 
 // ============ Socket.io ============
-const onlineUsers = new Map();
+const onlineUsers = new Map(); // userId -> socketId
+const socketUsers = new Map(); // socketId -> userId
+
+function getOnlineUsersList(excludeId) {
+  const list = [];
+  for (const [userId] of onlineUsers) {
+    if (userId === excludeId) continue;
+    const user = db.findUserById(userId);
+    if (user?.is_active) {
+      list.push({
+        id: user.id,
+        username: user.username,
+        display_name: user.display_name,
+        avatar_color: user.avatar_color
+      });
+    }
+  }
+  return list;
+}
+
+function emitToUser(userId, event, data) {
+  const socketId = onlineUsers.get(userId);
+  if (socketId) io.to(socketId).emit(event, data);
+}
 
 io.use((socket, next) => {
   const token = socket.handshake.auth.token;
@@ -225,6 +248,7 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   const userId = socket.user.id;
   onlineUsers.set(userId, socket.id);
+  socketUsers.set(socket.id, userId);
 
   const user = db.findUserById(userId);
   if (user) {
@@ -234,8 +258,25 @@ io.on('connection', (socket) => {
       avatar_color: user.avatar_color,
       username: user.username
     });
-    io.emit('online:count', { count: onlineUsers.size });
+    const onlineData = { count: onlineUsers.size, users: getOnlineUsersList(userId) };
+    io.emit('online:count', onlineData);
+    socket.emit('online:count', onlineData);
   }
+
+  socket.on('call:signal', (payload) => {
+    const to = parseInt(payload?.to);
+    const type = payload?.type;
+    if (!to || !type) return;
+
+    const fromUser = db.findUserById(userId);
+    emitToUser(to, 'call:signal', {
+      from: userId,
+      from_name: fromUser?.display_name,
+      from_color: fromUser?.avatar_color,
+      type,
+      data: payload.data || null
+    });
+  });
 
   socket.on('message:send', (data) => {
     const { content, media_type, media_url, media_name } = data;
@@ -280,8 +321,9 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     onlineUsers.delete(userId);
+    socketUsers.delete(socket.id);
     socket.broadcast.emit('user:offline', { userId });
-    io.emit('online:count', { count: onlineUsers.size });
+    io.emit('online:count', { count: onlineUsers.size, users: getOnlineUsersList(userId) });
   });
 });
 

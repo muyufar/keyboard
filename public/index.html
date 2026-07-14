@@ -39,6 +39,7 @@
       <div class="user-info">
         <div class="avatar" id="userAvatar"></div>
         <span id="userDisplayName"></span>
+        <button class="video-call-btn" id="videoCallBtn" title="Video Call">📹</button>
         <button class="logout-btn" id="logoutBtn">Keluar</button>
       </div>
     </header>
@@ -72,7 +73,40 @@
     <img id="lightboxImg" src="" alt="">
   </div>
 
+  <div id="callPickerModal" class="vc-modal" style="display:none">
+    <div class="vc-modal-card">
+      <h3>Video Call</h3>
+      <div id="onlineUsersList"></div>
+      <button id="closeCallPicker" class="btn btn-outline" style="width:100%;margin-top:12px">Batal</button>
+    </div>
+  </div>
+
+  <div id="incomingCall" class="vc-incoming" style="display:none">
+    <div class="vc-incoming-card">
+      <div class="vc-caller-avatar" id="incomingAvatar"></div>
+      <p id="incomingName">Seseorang memanggil...</p>
+      <div class="vc-incoming-actions">
+        <button id="acceptCallBtn" class="vc-btn vc-btn-accept">Terima</button>
+        <button id="rejectCallBtn" class="vc-btn vc-btn-reject">Tolak</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="activeCall" class="vc-active" style="display:none">
+    <div class="vc-videos">
+      <video id="remoteVideo" autoplay playsinline></video>
+      <video id="localVideo" autoplay playsinline muted></video>
+    </div>
+    <div class="vc-call-info"><span id="callStatusText">Menghubungkan...</span></div>
+    <div class="vc-controls">
+      <button id="toggleMicBtn" class="vc-ctrl-btn" title="Mikrofon">🎤</button>
+      <button id="toggleCamBtn" class="vc-ctrl-btn" title="Kamera">📷</button>
+      <button id="hangupBtn" class="vc-ctrl-btn vc-hangup" title="Tutup">📞</button>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/videocall.js"></script>
   <script src="/js/chat.js"></script>
 </body>
 </html>

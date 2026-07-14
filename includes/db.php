@@ -7,7 +7,7 @@ class JsonDB {
 
     public function __construct() {
         $this->filePath = DATA_PATH . '/chat.json';
-        $this->data = ['users' => [], 'messages' => [], 'sessions' => [], 'typing' => [], 'online' => [], 'deleted_messages' => [], '_counters' => ['users' => 0, 'messages' => 0]];
+        $this->data = ['users' => [], 'messages' => [], 'sessions' => [], 'typing' => [], 'online' => [], 'deleted_messages' => [], 'call_signals' => [], '_counters' => ['users' => 0, 'messages' => 0, 'signals' => 0]];
         $this->load();
     }
 
@@ -176,6 +176,66 @@ class JsonDB {
     public function getOnlineCount(): int {
         $this->cleanupOnline();
         return count($this->data['online']);
+    }
+
+    public function getOnlineUsers(int $excludeUserId): array {
+        $this->cleanupOnline();
+        $result = [];
+        foreach ($this->data['online'] as $uid => $lastSeen) {
+            $id = (int)$uid;
+            if ($id === $excludeUserId) continue;
+            $user = $this->findUserById($id);
+            if ($user && $user['is_active']) {
+                $result[] = [
+                    'id' => $user['id'],
+                    'username' => $user['username'],
+                    'display_name' => $user['display_name'],
+                    'avatar_color' => $user['avatar_color']
+                ];
+            }
+        }
+        return $result;
+    }
+
+    public function pushCallSignal(int $to, int $from, string $fromName, string $fromColor, string $type, $data = null): void {
+        if (!isset($this->data['call_signals'])) $this->data['call_signals'] = [];
+        if (!isset($this->data['_counters']['signals'])) $this->data['_counters']['signals'] = 0;
+
+        $this->data['call_signals'][] = [
+            'id' => ++$this->data['_counters']['signals'],
+            'to' => $to,
+            'from' => $from,
+            'from_name' => $fromName,
+            'from_color' => $fromColor,
+            'type' => $type,
+            'data' => $data,
+            'time' => time()
+        ];
+
+        // Batasi antrian signal
+        if (count($this->data['call_signals']) > 200) {
+            $this->data['call_signals'] = array_slice($this->data['call_signals'], -100);
+        }
+
+        $this->save();
+    }
+
+    public function pullCallSignals(int $userId): array {
+        if (!isset($this->data['call_signals'])) return [];
+
+        $mine = [];
+        $rest = [];
+        foreach ($this->data['call_signals'] as $sig) {
+            if ((int)$sig['to'] === $userId) {
+                $mine[] = $sig;
+            } else {
+                $rest[] = $sig;
+            }
+        }
+
+        $this->data['call_signals'] = $rest;
+        $this->save();
+        return $mine;
     }
 
     private function cleanupOnline(): void {

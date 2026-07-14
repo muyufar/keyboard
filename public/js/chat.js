@@ -4,6 +4,7 @@ let currentUser = null;
 let pendingFile = null;
 let typingTimeout = null;
 let isTyping = false;
+let videoCall = null;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -70,6 +71,8 @@ $('#logoutBtn').addEventListener('click', () => {
   localStorage.removeItem('chat_token');
   localStorage.removeItem('chat_user');
   if (socket) socket.disconnect();
+  videoCall?.cleanup();
+  videoCall = null;
   currentUser = null;
   chatScreen.style.display = 'none';
   loginScreen.style.display = 'flex';
@@ -84,6 +87,13 @@ function showChat() {
   avatar.textContent = currentUser.display_name.charAt(0).toUpperCase();
   avatar.style.background = currentUser.avatar_color;
   $('#userDisplayName').textContent = currentUser.display_name;
+
+  videoCall = new VideoCallManager({
+    currentUser,
+    sendSignal: (to, type, data) => {
+      socket?.emit('call:signal', { to, type, data });
+    }
+  });
 
   connectSocket();
   loadMessages();
@@ -116,6 +126,11 @@ function connectSocket() {
 
   socket.on('online:count', (data) => {
     onlineCount.textContent = `${data.count} online`;
+    if (videoCall) videoCall.setOnlineUsers(data.users || []);
+  });
+
+  socket.on('call:signal', (signal) => {
+    videoCall?.handleSignal(signal);
   });
 
   socket.on('connect_error', () => {

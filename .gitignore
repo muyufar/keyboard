@@ -1,0 +1,8 @@
+node_modules/
+uploads/*
+!uploads/.gitkeep
+!uploads/.htaccess
+data/
+*.db
+.env
+*.zip

@@ -1,0 +1,76 @@
+<?php require_once __DIR__ . '/includes/config.php'; ?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Light Chat</title>
+  <link rel="stylesheet" href="<?= BASE_PATH ?>/public/css/style.css">
+</head>
+<body>
+
+  <div id="loginScreen" class="login-page">
+    <div class="login-card">
+      <h1>Light Chat</h1>
+      <p>Masuk untuk mulai mengobrol secara real-time</p>
+      <div id="loginError" class="error-msg"></div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" placeholder="Masukkan username" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="Masukkan password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary">Masuk</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="chatScreen" class="chat-app" style="display:none">
+    <header class="chat-header">
+      <h2>
+        <span class="online-dot"></span>
+        Light Chat
+        <span class="online-count" id="onlineCount">0 online</span>
+      </h2>
+      <div class="user-info">
+        <div class="avatar" id="userAvatar"></div>
+        <span id="userDisplayName"></span>
+        <button class="logout-btn" id="logoutBtn">Keluar</button>
+      </div>
+    </header>
+
+    <div class="messages-container" id="messagesContainer"></div>
+    <div class="typing-indicator" id="typingIndicator"></div>
+
+    <div class="chat-input-area">
+      <div class="upload-progress" id="uploadProgress">
+        <div class="upload-progress-bar" id="uploadProgressBar"></div>
+      </div>
+      <div class="attachment-preview" id="attachmentPreview">
+        <img class="preview-thumb" id="previewThumb" src="" alt="" style="display:none">
+        <div class="preview-info">
+          <div class="preview-name" id="previewName"></div>
+          <div class="preview-size" id="previewSize"></div>
+        </div>
+        <button class="remove-attachment" id="removeAttachment" title="Hapus">&times;</button>
+      </div>
+      <div class="input-row">
+        <button class="attach-btn" id="attachBtn" title="Lampirkan file">📎</button>
+        <input type="file" id="fileInput" accept="image/*,video/*,audio/*" hidden>
+        <textarea class="message-input" id="messageInput" placeholder="Ketik pesan..." rows="1"></textarea>
+        <button class="send-btn" id="sendBtn" title="Kirim">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="lightbox" id="lightbox">
+    <img id="lightboxImg" src="" alt="">
+  </div>
+
+  <script>const BASE = '<?= BASE_PATH ?>';</script>
+  <script src="<?= BASE_PATH ?>/public/js/chat-php.js"></script>
+</body>
+</html>

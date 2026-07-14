@@ -1,0 +1,14 @@
+# Light Chat - PHP version
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Teruskan Authorization header (penting untuk upload file di shared hosting)
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Blokir akses langsung ke includes
+    RewriteRule ^includes/ - [F,L]
+
+    DirectoryIndex index.php index.html
+</IfModule>

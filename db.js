@@ -1,0 +1,108 @@
+const fs = require('fs');
+const path = require('path');
+
+class JsonDB {
+  constructor(filePath) {
+    this.filePath = filePath;
+    this.data = { users: [], messages: [], _counters: { users: 0, messages: 0 } };
+    this._load();
+  }
+
+  _load() {
+    if (fs.existsSync(this.filePath)) {
+      try {
+        this.data = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
+        if (!this.data._counters) this.data._counters = { users: 0, messages: 0 };
+      } catch {
+        this._save();
+      }
+    } else {
+      this._save();
+    }
+  }
+
+  _save() {
+    const dir = path.dirname(this.filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2));
+  }
+
+  // Users
+  findUserByUsername(username) {
+    return this.data.users.find(u => u.username === username) || null;
+  }
+
+  findUserById(id) {
+    return this.data.users.find(u => u.id === id) || null;
+  }
+
+  getAllUsers() {
+    return [...this.data.users].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
+
+  createUser({ username, password, display_name, avatar_color }) {
+    const user = {
+      id: ++this.data._counters.users,
+      username,
+      password,
+      display_name,
+      avatar_color,
+      is_active: 1,
+      created_at: new Date().toISOString()
+    };
+    this.data.users.push(user);
+    this._save();
+    return user;
+  }
+
+  toggleUser(id) {
+    const user = this.findUserById(id);
+    if (!user) return null;
+    user.is_active = user.is_active ? 0 : 1;
+    this._save();
+    return user;
+  }
+
+  deleteUser(id) {
+    this.data.messages = this.data.messages.filter(m => m.user_id !== id);
+    this.data.users = this.data.users.filter(u => u.id !== id);
+    this._save();
+  }
+
+  // Messages
+  createMessage({ user_id, content, media_type, media_url, media_name }) {
+    const msg = {
+      id: ++this.data._counters.messages,
+      user_id,
+      content: content || null,
+      media_type: media_type || null,
+      media_url: media_url || null,
+      media_name: media_name || null,
+      created_at: new Date().toISOString()
+    };
+    this.data.messages.push(msg);
+    this._save();
+    return msg;
+  }
+
+  getMessages({ limit = 50, before = null } = {}) {
+    let msgs = [...this.data.messages];
+    if (before) msgs = msgs.filter(m => m.id < before);
+    msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    return msgs.slice(-limit);
+  }
+
+  getMessageWithUser(id) {
+    const msg = this.data.messages.find(m => m.id === id);
+    if (!msg) return null;
+    const user = this.findUserById(msg.user_id);
+    return {
+      ...msg,
+      display_name: user?.display_name,
+      avatar_color: user?.avatar_color,
+      username: user?.username
+    };
+  }
+}
+
+module.exports = JsonDB;

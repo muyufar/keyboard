@@ -1,0 +1,3 @@
+<?php
+// Redirect /backoffice/ ke backoffice/index.php jika diperlukan
+// File ini opsional - backoffice/index.php sudah ada

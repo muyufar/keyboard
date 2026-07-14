@@ -2,8 +2,8 @@
 require_once __DIR__ . '/config.php';
 
 class JsonDB {
-    private string $filePath;
-    private array $data;
+    private $filePath;
+    private $data;
 
     public function __construct() {
         $this->filePath = DATA_PATH . '/chat.json';

@@ -69,47 +69,68 @@ if (savedToken && savedUser) {
 
 async function loadCharacters(retry = 0) {
   loginError.style.display = 'none';
-  try {
-    const res = await fetch(API + '/characters.php', { cache: 'no-store' });
-    const characters = await parseJsonResponse(res);
+  const urls = [
+    API + '/characters.php',
+    (typeof BASE !== 'undefined' ? BASE : '') + '/get-characters.php'
+  ];
 
-    if (!res.ok) {
-      throw new Error(characters.error || ('Server error ' + res.status));
-    }
-    if (!Array.isArray(characters)) {
-      throw new Error('Format data karakter tidak valid');
-    }
-    if (typeof renderCharacterGrid !== 'function') {
-      throw new Error('Komponen karakter belum dimuat. Refresh halaman.');
-    }
+  let lastErr = null;
 
-    renderCharacterGrid(characters, characterGrid, (ch) => {
-      selectedCharacter = ch;
-      selectedCharName.textContent = ch.display_name
-        ? `${PIXEL_CHARS[ch.id]?.name} — ${ch.display_name}`
-        : '';
-      updateEnterBtn();
-    });
-  } catch (err) {
-    if (retry < 2) {
-      await new Promise((r) => setTimeout(r, 1500));
-      return loadCharacters(retry + 1);
-    }
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { cache: 'no-store' });
+      const text = await res.text();
+      if (!text) {
+        throw new Error('Respons kosong dari ' + url);
+      }
+      let characters;
+      try {
+        characters = JSON.parse(text);
+      } catch {
+        throw new Error('Bukan JSON valid: ' + text.substring(0, 80));
+      }
 
-    loginError.innerHTML = `Gagal memuat karakter: ${escapeHtml(err.message)}. <button type="button" class="btn btn-outline btn-sm" id="retryCharacters" style="margin-top:8px">Coba Lagi</button>`;
-    loginError.style.display = 'block';
-    $('#retryCharacters')?.addEventListener('click', () => loadCharacters());
+      if (!res.ok) {
+        throw new Error(characters.error || ('HTTP ' + res.status));
+      }
+      if (!Array.isArray(characters)) {
+        throw new Error('Format data karakter tidak valid');
+      }
+      if (typeof renderCharacterGrid !== 'function') {
+        throw new Error('Komponen karakter belum dimuat. Refresh halaman.');
+      }
 
-    if (typeof renderCharacterGrid === 'function' && characterGrid) {
-      const fallback = Object.keys(PIXEL_CHARS).map((id) => ({
-        id,
-        name: PIXEL_CHARS[id].name,
-        title: PIXEL_CHARS[id].title,
-        available: false,
-        display_name: null
-      }));
-      renderCharacterGrid(fallback, characterGrid, () => {});
+      renderCharacterGrid(characters, characterGrid, (ch) => {
+        selectedCharacter = ch;
+        selectedCharName.textContent = ch.display_name
+          ? `${PIXEL_CHARS[ch.id]?.name} — ${ch.display_name}`
+          : '';
+        updateEnterBtn();
+      });
+      return;
+    } catch (err) {
+      lastErr = err;
     }
+  }
+
+  if (retry < 2) {
+    await new Promise((r) => setTimeout(r, 1500));
+    return loadCharacters(retry + 1);
+  }
+
+  loginError.innerHTML = `Gagal memuat karakter: ${escapeHtml(lastErr?.message || 'Unknown')}. <button type="button" class="btn btn-outline btn-sm" id="retryCharacters" style="margin-top:8px">Coba Lagi</button>`;
+  loginError.style.display = 'block';
+  $('#retryCharacters')?.addEventListener('click', () => loadCharacters());
+
+  if (typeof renderCharacterGrid === 'function' && characterGrid) {
+    const fallback = Object.keys(PIXEL_CHARS).map((id) => ({
+      id,
+      name: PIXEL_CHARS[id].name,
+      title: PIXEL_CHARS[id].title,
+      available: false,
+      display_name: null
+    }));
+    renderCharacterGrid(fallback, characterGrid, () => {});
   }
 }
 

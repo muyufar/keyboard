@@ -1,4 +1,8 @@
-<?php require_once __DIR__ . '/includes/config.php'; ?>
+<?php
+require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/login_characters.php';
+$loginCharacters = build_login_characters();
+?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -136,7 +140,7 @@
     </div>
   </div>
 
-  <script>const BASE = '<?= BASE_PATH ?>';</script>
+  <script>const BASE = '<?= BASE_PATH ?>'; const LOGIN_CHARACTERS = <?= json_encode($loginCharacters, JSON_UNESCAPED_UNICODE) ?>;</script>
   <script src="<?= BASE_PATH ?>/public/js/pwa.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/characters.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/notifications.js"></script>

@@ -69,9 +69,25 @@ if (savedToken && savedUser) {
 
 async function loadCharacters(retry = 0) {
   loginError.style.display = 'none';
+
+  if (typeof LOGIN_CHARACTERS !== 'undefined' && Array.isArray(LOGIN_CHARACTERS)) {
+    try {
+      renderCharacterGrid(LOGIN_CHARACTERS, characterGrid, (ch) => {
+        selectedCharacter = ch;
+        selectedCharName.textContent = ch.display_name
+          ? `${PIXEL_CHARS[ch.id]?.name} — ${ch.display_name}`
+          : '';
+        updateEnterBtn();
+      });
+      return;
+    } catch (err) {
+      console.warn('LOGIN_CHARACTERS render gagal:', err);
+    }
+  }
+
   const urls = [
-    API + '/characters.php',
-    (typeof BASE !== 'undefined' ? BASE : '') + '/get-characters.php'
+    (typeof BASE !== 'undefined' ? BASE : '') + '/get-characters.php',
+    API + '/characters.php'
   ];
 
   let lastErr = null;

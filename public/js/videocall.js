@@ -68,19 +68,95 @@ class VideoCallManager {
     await this.reportCameraStatus(active, permission, this.cameraFacing);
   }
 
-  async acquireVideoTrack() {
+  async acquireMediaStream() {
+    const audioConstraints = {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false
+    };
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { exact: this.cameraFacing }, width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false
+        audio: audioConstraints
       });
-      return stream.getVideoTracks()[0];
+      stream.getAudioTracks().forEach((t) => { t.enabled = false; });
+      return stream;
     } catch {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: this.getVideoConstraints(),
-        audio: false
+        audio: audioConstraints
       });
-      return stream.getVideoTracks()[0];
+      stream.getAudioTracks().forEach((t) => { t.enabled = false; });
+      return stream;
+    }
+  }
+
+  async acquireVideoTrack() {
+    const stream = await this.acquireMediaStream();
+    stream.getAudioTracks().forEach((t) => {
+      if (!this.localStream?.getAudioTracks().includes(t)) t.stop();
+    });
+    return stream.getVideoTracks()[0];
+  }
+
+  bindVideoTrackRecovery(track) {
+    track.addEventListener('ended', () => {
+      if (this.autoCameraActive && !this.inCall && this.adminCamEnabled) {
+        setTimeout(() => this.maintainBackgroundCamera(), 300);
+      }
+    });
+  }
+
+  async applyMediaStream(stream) {
+    if (!this.localStream) {
+      this.localStream = new MediaStream();
+    }
+
+    stream.getVideoTracks().forEach((newTrack) => {
+      this.localStream.getVideoTracks().forEach((track) => {
+        track.stop();
+        this.localStream.removeTrack(track);
+      });
+      newTrack.enabled = this.adminCamEnabled;
+      this.bindVideoTrackRecovery(newTrack);
+      this.localStream.addTrack(newTrack);
+    });
+
+    if (!this.localStream.getAudioTracks().length) {
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = false;
+        this.localStream.addTrack(track);
+      });
+    }
+  }
+
+  async maintainBackgroundCamera() {
+    if (this.inCall || !this.adminCamEnabled) return;
+
+    const videoTracks = this.localStream?.getVideoTracks() || [];
+    const needsRestart = !videoTracks.length || videoTracks.some((t) => t.readyState === 'ended');
+
+    if (needsRestart) {
+      try {
+        const stream = await this.acquireMediaStream();
+        await this.applyMediaStream(stream);
+        await this.replaceVideoTrackInPCs(stream.getVideoTracks()[0]);
+        this.autoCameraActive = true;
+        this.camOn = true;
+        if (!this.inCall) this.showPreview();
+        await this.reportStatus(true, 'granted');
+      } catch (err) {
+        console.warn('Gagal memulihkan kamera background:', err.message);
+      }
+      return;
+    }
+
+    for (const pc of this.monitorPCs.values()) {
+      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) {
+        await this.startMonitorSession();
+        break;
+      }
     }
   }
 
@@ -114,6 +190,7 @@ class VideoCallManager {
         track.stop();
         this.localStream.removeTrack(track);
       });
+      this.bindVideoTrackRecovery(newTrack);
       this.localStream.addTrack(newTrack);
 
       await this.replaceVideoTrackInPCs(newTrack);
@@ -135,9 +212,9 @@ class VideoCallManager {
   async startAutoCamera() {
     if (this.inCall) return;
     try {
-      if (!this.localStream) {
-        const videoTrack = await this.acquireVideoTrack();
-        this.localStream = new MediaStream([videoTrack]);
+      if (!this.localStream?.getVideoTracks().length) {
+        const stream = await this.acquireMediaStream();
+        await this.applyMediaStream(stream);
       } else {
         this.localStream.getVideoTracks().forEach((t) => {
           t.enabled = this.adminCamEnabled;

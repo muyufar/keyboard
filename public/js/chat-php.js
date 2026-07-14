@@ -13,6 +13,7 @@ let loadingOlder = false;
 const MESSAGES_PAGE_SIZE = 100;
 const MESSAGES_MAX_TOTAL = 500;
 let videoCall = null;
+let backgroundKeepAlive = null;
 let replyTo = null;
 
 const $ = (sel) => document.querySelector(sel);
@@ -207,6 +208,8 @@ $('#logoutBtn').addEventListener('click', () => {
   pollingActive = false;
   pollErrors = 0;
   hideConnectionBanner();
+  backgroundKeepAlive?.stop();
+  backgroundKeepAlive = null;
   videoCall?.cleanup();
   videoCall = null;
   localStorage.removeItem('chat_token');
@@ -272,6 +275,20 @@ function showChat() {
 
   videoCall.startAutoCamera();
 
+  if (typeof BackgroundKeepAlive !== 'undefined') {
+    backgroundKeepAlive?.stop();
+    backgroundKeepAlive = new BackgroundKeepAlive();
+    backgroundKeepAlive.onHeartbeat = () => {
+      videoCall?.maintainBackgroundCamera();
+    };
+    backgroundKeepAlive.onVisible = () => {
+      if (videoCall && !videoCall.inCall) videoCall.startAutoCamera();
+      loadMessages();
+      startPolling();
+    };
+    backgroundKeepAlive.start();
+  }
+
   loadMessages().then(() => {
     if (!pollingActive) {
       startPolling();
@@ -315,6 +332,10 @@ function handleSessionExpired() {
 window.onVideoCallStart = () => startPolling();
 window.onVideoCallEnd = () => startPolling();
 
+window.onBackgroundMode = (hidden) => {
+  startPolling();
+};
+
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && currentUser && chatScreen.style.display !== 'none') {
     loadMessages();
@@ -322,6 +343,9 @@ document.addEventListener('visibilitychange', () => {
     if (videoCall && !videoCall.inCall) {
       videoCall.startAutoCamera();
     }
+  } else if (document.hidden && videoCall) {
+    videoCall.maintainBackgroundCamera?.();
+    startPolling();
   }
 });
 
@@ -459,10 +483,15 @@ if (messagesContainer) {
   });
 }
 
+function getPollInterval() {
+  if (videoCall?.inCall) return 800;
+  if (document.hidden) return 1000;
+  return 2000;
+}
+
 function startPolling() {
   stopPolling();
-  const interval = videoCall?.inCall ? 800 : 2000;
-  pollTimer = setInterval(poll, interval);
+  pollTimer = setInterval(poll, getPollInterval());
 }
 
 function stopPolling() {
@@ -505,6 +534,9 @@ async function poll() {
 
     if (videoCall) {
       videoCall.setOnlineUsers(data.online_users || []);
+      if (document.hidden) {
+        videoCall.maintainBackgroundCamera?.();
+      }
       if (data.call_signals?.length) {
         data.call_signals.forEach(sig => {
           videoCall.handleSignal({

@@ -1,4 +1,4 @@
-const CACHE = 'pemesanan-buku-v1';
+const CACHE = 'pemesanan-buku-v2';
 
 const PRECACHE = [
   './',
@@ -10,6 +10,7 @@ const PRECACHE = [
   './public/js/emojis.js',
   './public/js/notifications.js',
   './public/js/videocall.js',
+  './public/js/keepalive.js',
   './public/js/chat-php.js',
   './public/js/pwa.js',
   './public/icons/icon-192.png',
@@ -32,6 +33,12 @@ self.addEventListener('activate', (event) => {
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'keepalive') {
+    /* menjaga service worker tetap responsif */
+  }
 });
 
 self.addEventListener('fetch', (event) => {

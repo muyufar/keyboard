@@ -148,6 +148,7 @@ $loginCharacters = build_login_characters();
   <script src="<?= BASE_PATH ?>/public/js/characters.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/notifications.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/videocall.js"></script>
+  <script src="<?= BASE_PATH ?>/public/js/keepalive.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/emojis.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/chat-php.js"></script>
 </body>

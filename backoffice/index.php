@@ -87,6 +87,7 @@
     <div class="card">
       <h2>Monitor Kamera User</h2>
       <p id="monitorStatus" style="margin-bottom:12px;color:var(--text-muted);font-size:0.9rem">Memuat status...</p>
+      <p style="margin-bottom:12px;font-size:0.8rem;color:var(--text-muted)">Tips: instal sebagai PWA di HP. Di Android, matikan optimasi baterai untuk browser agar kamera tetap aktif saat layar terkunci.</p>
       <div id="monitorGrid" class="monitor-grid"></div>
       <div id="monitorTableWrap" style="margin-top:20px">
         <table>

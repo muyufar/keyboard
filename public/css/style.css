@@ -838,6 +838,13 @@ table th {
 .actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+}
+
+.table-char-sprite .pixel-sprite {
+  animation: none;
+  transform: scale(0.85);
+  transform-origin: center;
 }
 
 .empty-state {

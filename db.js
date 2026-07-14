@@ -68,6 +68,19 @@ class JsonDB {
     return user;
   }
 
+  updateUser(id, data) {
+    const user = this.findUserById(id);
+    if (!user) return null;
+    if (data.display_name !== undefined) user.display_name = data.display_name;
+    if (data.character_id !== undefined) {
+      user.character_id = data.character_id;
+      user.username = data.character_id;
+    }
+    if (data.avatar_color !== undefined) user.avatar_color = data.avatar_color;
+    this._save();
+    return user;
+  }
+
   deleteUser(id) {
     this.data.messages = this.data.messages.filter(m => m.user_id !== id);
     this.data.users = this.data.users.filter(u => u.id !== id);

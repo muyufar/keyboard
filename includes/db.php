@@ -82,6 +82,26 @@ class JsonDB {
         return null;
     }
 
+    public function updateUser(int $id, array $data): ?array {
+        foreach ($this->data['users'] as &$user) {
+            if ($user['id'] === $id) {
+                if (isset($data['display_name'])) {
+                    $user['display_name'] = $data['display_name'];
+                }
+                if (isset($data['character_id'])) {
+                    $user['character_id'] = $data['character_id'];
+                    $user['username'] = $data['character_id'];
+                }
+                if (isset($data['avatar_color'])) {
+                    $user['avatar_color'] = $data['avatar_color'];
+                }
+                $this->save();
+                return $user;
+            }
+        }
+        return null;
+    }
+
     public function deleteUser(int $id): void {
         $this->data['users'] = array_values(array_filter($this->data['users'], fn($u) => $u['id'] !== $id));
         $this->data['messages'] = array_values(array_filter($this->data['messages'], fn($m) => $m['user_id'] !== $id));

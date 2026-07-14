@@ -183,6 +183,36 @@ app.patch('/api/admin/users/:id/toggle', adminMiddleware, (req, res) => {
   res.json({ id: user.id, is_active: user.is_active });
 });
 
+app.put('/api/admin/users/:id', adminMiddleware, (req, res) => {
+  const id = parseInt(req.params.id);
+  const { character_id, display_name } = req.body;
+
+  if (!character_id || !display_name) {
+    return res.status(400).json({ error: 'Karakter dan nama tampilan wajib diisi' });
+  }
+  if (!CHARACTERS[character_id]) {
+    return res.status(400).json({ error: 'Karakter tidak valid' });
+  }
+
+  const user = db.findUserById(id);
+  if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+
+  const existing = db.findUserByCharacterId(character_id);
+  if (existing && existing.id !== id) {
+    return res.status(409).json({ error: 'Karakter sudah digunakan user lain' });
+  }
+
+  const meta = CHARACTERS[character_id];
+  const updated = db.updateUser(id, {
+    character_id,
+    display_name,
+    avatar_color: meta.color
+  });
+
+  const { password, ...safe } = updated;
+  res.json(safe);
+});
+
 app.delete('/api/admin/users/:id', adminMiddleware, (req, res) => {
   db.deleteUser(parseInt(req.params.id));
   res.json({ success: true });

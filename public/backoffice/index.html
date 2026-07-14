@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Backoffice - Pemesanan Buku</title>
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/characters.css">
 </head>
 <body>
 
@@ -92,6 +93,37 @@
     </div>
   </div>
 
+  <div id="editModal" class="vc-modal" style="display:none">
+    <div class="vc-modal-card" style="max-width:420px">
+      <h3>Edit User</h3>
+      <div id="editError" class="error-msg"></div>
+      <form id="editForm">
+        <input type="hidden" id="editUserId">
+        <div class="form-group">
+          <label for="editCharacter">Karakter</label>
+          <select id="editCharacter" required>
+            <option value="">Pilih karakter...</option>
+            <option value="librarian">📚 Pustakawan</option>
+            <option value="student">🎓 Pelajar</option>
+            <option value="merchant">🏪 Pedagang</option>
+            <option value="writer">✍️ Penulis</option>
+            <option value="reader">📖 Pembaca</option>
+            <option value="courier">📦 Kurir</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="editDisplayName">Nama Tampilan</label>
+          <input type="text" id="editDisplayName" required>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button type="submit" class="btn btn-primary" style="flex:1">Simpan</button>
+          <button type="button" class="btn btn-outline" id="closeEditModal" style="flex:1">Batal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/characters.js"></script>
   <script src="/js/backoffice.js"></script>
 </body>
 </html>

@@ -16,6 +16,7 @@ const loginError = $('#loginError');
 const characterGrid = $('#characterGrid');
 const enterBtn = $('#enterBtn');
 const selectedCharName = $('#selectedCharName');
+const loginCode = $('#loginCode');
 let selectedCharacter = null;
 const messagesContainer = $('#messagesContainer');
 const messageInput = $('#messageInput');
@@ -57,7 +58,7 @@ async function loadCharacters() {
       selectedCharName.textContent = ch.display_name
         ? `${PIXEL_CHARS[ch.id]?.name} — ${ch.display_name}`
         : '';
-      enterBtn.disabled = false;
+      updateEnterBtn();
     });
   } catch (err) {
     loginError.textContent = 'Gagal memuat karakter';
@@ -65,16 +66,39 @@ async function loadCharacters() {
   }
 }
 
+function updateEnterBtn() {
+  const code = loginCode?.value.trim() || '';
+  enterBtn.disabled = !selectedCharacter || code.length !== 4;
+}
+
+if (loginCode) {
+  loginCode.addEventListener('input', () => {
+    loginCode.value = loginCode.value.replace(/\D/g, '').slice(0, 4);
+    updateEnterBtn();
+  });
+  loginCode.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !enterBtn.disabled) enterBtn.click();
+  });
+}
+
 enterBtn.addEventListener('click', async () => {
   if (!selectedCharacter) return;
   loginError.style.display = 'none';
   enterBtn.disabled = true;
 
+  const code = loginCode?.value.trim() || '';
+  if (code.length !== 4) {
+    loginError.textContent = 'Masukkan kode akses 4 digit';
+    loginError.style.display = 'block';
+    updateEnterBtn();
+    return;
+  }
+
   try {
     const res = await fetch(API + '/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ character_id: selectedCharacter.id })
+      body: JSON.stringify({ character_id: selectedCharacter.id, code })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
@@ -86,7 +110,7 @@ enterBtn.addEventListener('click', async () => {
   } catch (err) {
     loginError.textContent = err.message;
     loginError.style.display = 'block';
-    enterBtn.disabled = false;
+    updateEnterBtn();
   }
 });
 
@@ -102,8 +126,9 @@ $('#logoutBtn').addEventListener('click', () => {
   loginScreen.style.display = 'flex';
   messagesContainer.innerHTML = '';
   selectedCharacter = null;
-  enterBtn.disabled = true;
+  if (loginCode) loginCode.value = '';
   selectedCharName.textContent = '';
+  updateEnterBtn();
   loadCharacters();
 });
 

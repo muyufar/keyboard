@@ -6,6 +6,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonResponse(['error' => 'Method not 
 
 $input = getJsonInput();
 $characterId = trim($input['character_id'] ?? '');
+$code = trim($input['code'] ?? '');
+
+if ($code !== $db->getLoginCode()) {
+    jsonResponse(['error' => 'Kode akses salah'], 401);
+}
 
 if (!$characterId || !isValidCharacter($characterId)) {
     jsonResponse(['error' => 'Karakter tidak valid'], 400);

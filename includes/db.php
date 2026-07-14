@@ -7,8 +7,30 @@ class JsonDB {
 
     public function __construct() {
         $this->filePath = DATA_PATH . '/chat.json';
-        $this->data = ['users' => [], 'messages' => [], 'sessions' => [], 'typing' => [], 'online' => [], 'deleted_messages' => [], 'call_signals' => [], '_counters' => ['users' => 0, 'messages' => 0, 'signals' => 0]];
+        $this->data = ['users' => [], 'messages' => [], 'sessions' => [], 'typing' => [], 'online' => [], 'deleted_messages' => [], 'call_signals' => [], 'settings' => ['login_code' => LOGIN_CODE], '_counters' => ['users' => 0, 'messages' => 0, 'signals' => 0]];
         $this->load();
+    }
+
+    private function ensureSettings(): void {
+        if (!isset($this->data['settings']) || !is_array($this->data['settings'])) {
+            $this->data['settings'] = [];
+        }
+        if (empty($this->data['settings']['login_code'])) {
+            $this->data['settings']['login_code'] = LOGIN_CODE;
+            $this->save();
+        }
+    }
+
+    public function getLoginCode(): string {
+        $this->ensureSettings();
+        return (string)$this->data['settings']['login_code'];
+    }
+
+    public function setLoginCode(string $code): string {
+        $this->ensureSettings();
+        $this->data['settings']['login_code'] = $code;
+        $this->save();
+        return $code;
     }
 
     private function load(): void {
@@ -22,6 +44,7 @@ class JsonDB {
         } else {
             $this->save();
         }
+        $this->ensureSettings();
     }
 
     public function save(): void {

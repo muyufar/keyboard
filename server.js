@@ -111,7 +111,12 @@ app.get('/api/characters', (req, res) => {
 });
 
 app.post('/api/login', (req, res) => {
-  const { character_id } = req.body;
+  const { character_id, code } = req.body;
+
+  if (String(code || '').trim() !== db.getLoginCode()) {
+    return res.status(401).json({ error: 'Kode akses salah' });
+  }
+
   if (!character_id || !CHARACTERS[character_id]) {
     return res.status(400).json({ error: 'Karakter tidak valid' });
   }
@@ -216,6 +221,19 @@ app.put('/api/admin/users/:id', adminMiddleware, (req, res) => {
 app.delete('/api/admin/users/:id', adminMiddleware, (req, res) => {
   db.deleteUser(parseInt(req.params.id));
   res.json({ success: true });
+});
+
+app.get('/api/admin/settings', adminMiddleware, (req, res) => {
+  res.json({ login_code: db.getLoginCode() });
+});
+
+app.put('/api/admin/settings', adminMiddleware, (req, res) => {
+  const code = String(req.body.login_code || '').trim();
+  if (!/^\d{4}$/.test(code)) {
+    return res.status(400).json({ error: 'Kode harus 4 digit angka' });
+  }
+  db.setLoginCode(code);
+  res.json({ login_code: code });
 });
 
 app.get('/api/messages', authMiddleware, (req, res) => {

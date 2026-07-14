@@ -3,8 +3,16 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#6366f1">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Pemesanan Buku">
   <title>Pemesanan Buku</title>
+  <link rel="manifest" href="<?= BASE_PATH ?>/manifest.php">
+  <link rel="apple-touch-icon" href="<?= BASE_PATH ?>/public/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="<?= BASE_PATH ?>/public/icons/icon-192.png">
   <link rel="stylesheet" href="<?= BASE_PATH ?>/public/css/style.css">
   <link rel="stylesheet" href="<?= BASE_PATH ?>/public/css/characters.css">
 </head>
@@ -19,8 +27,13 @@
     <div class="character-grid" id="characterGrid"></div>
     <div class="character-login-footer">
       <div class="character-selected-name" id="selectedCharName"></div>
+      <div class="login-code-wrap">
+        <label for="loginCode">Kode Akses</label>
+        <input type="password" id="loginCode" class="login-code-input" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off">
+      </div>
       <button class="btn btn-primary" id="enterBtn" disabled>Masuk</button>
       <p class="character-hint">Karakter dikunci? Daftarkan di Backoffice</p>
+      <button type="button" class="btn btn-outline btn-sm" id="installAppBtnLogin" style="margin-top:12px;display:none">📲 Instal Aplikasi</button>
     </div>
   </div>
 
@@ -34,6 +47,7 @@
       <div class="user-info">
         <div class="avatar" id="userAvatar"></div>
         <span id="userDisplayName"></span>
+        <button class="video-call-btn" id="installAppBtn" title="Instal ke Layar Utama" style="display:none">📲</button>
         <button class="video-call-btn" id="videoCallBtn" title="Video Call">📹</button>
         <button class="video-call-btn" id="notifyBtn" title="Notifikasi">🔔</button>
         <button class="logout-btn" id="logoutBtn">Keluar</button>
@@ -108,7 +122,17 @@
     </div>
   </div>
 
+  <div id="installBanner" class="install-banner" style="display:none">
+    <div class="install-banner-inner">
+      <span class="install-banner-icon">📲</span>
+      <p id="installBannerText"></p>
+      <button id="installBannerBtn" class="btn btn-primary btn-sm">Instal</button>
+      <button id="installBannerClose" class="install-banner-close" aria-label="Tutup">&times;</button>
+    </div>
+  </div>
+
   <script>const BASE = '<?= BASE_PATH ?>';</script>
+  <script src="<?= BASE_PATH ?>/public/js/pwa.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/characters.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/notifications.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/videocall.js"></script>

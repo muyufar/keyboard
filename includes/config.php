@@ -6,6 +6,7 @@ define('UPLOADS_PATH', ROOT_PATH . '/uploads');
 define('JWT_SECRET', getenv('JWT_SECRET') ?: 'light-chat-secret-key-2026');
 define('ADMIN_USER', getenv('ADMIN_USER') ?: 'admin');
 define('ADMIN_PASS', getenv('ADMIN_PASS') ?: 'admin123');
+define('LOGIN_CODE', getenv('LOGIN_CODE') ?: '0505');
 
 define('MAX_FILE_SIZE', 50 * 1024 * 1024);
 define('POLL_INTERVAL', 2);

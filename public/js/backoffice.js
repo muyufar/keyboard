@@ -16,6 +16,10 @@ const emptyUsers = $('#emptyUsers');
 const editModal = $('#editModal');
 const editForm = $('#editForm');
 const editError = $('#editError');
+const settingsForm = $('#settingsForm');
+const settingsSuccess = $('#settingsSuccess');
+const settingsError = $('#settingsError');
+const loginCodeSetting = $('#loginCodeSetting');
 
 const CHAR_LABELS = {
   librarian: 'Pustakawan', student: 'Pelajar', merchant: 'Pedagang',
@@ -67,7 +71,56 @@ $('#adminLogout').addEventListener('click', () => {
 function showPanel() {
   adminLogin.style.display = 'none';
   adminPanel.style.display = 'block';
+  loadSettings();
   loadUsers();
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch(API + '/api/admin/settings', { headers: authHeaders() });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (loginCodeSetting) loginCodeSetting.value = data.login_code || '';
+  } catch (err) {
+    console.error('Gagal memuat pengaturan:', err);
+  }
+}
+
+if (loginCodeSetting) {
+  loginCodeSetting.addEventListener('input', () => {
+    loginCodeSetting.value = loginCodeSetting.value.replace(/\D/g, '').slice(0, 4);
+  });
+}
+
+if (settingsForm) {
+  settingsForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    settingsSuccess.style.display = 'none';
+    settingsError.style.display = 'none';
+
+    const login_code = loginCodeSetting.value.trim();
+    if (!/^\d{4}$/.test(login_code)) {
+      settingsError.textContent = 'Kode harus 4 digit angka';
+      settingsError.style.display = 'block';
+      return;
+    }
+
+    try {
+      const res = await fetch(API + '/api/admin/settings', {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login_code })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      settingsSuccess.textContent = 'Kode akses berhasil disimpan';
+      settingsSuccess.style.display = 'block';
+    } catch (err) {
+      settingsError.textContent = err.message;
+      settingsError.style.display = 'block';
+    }
+  });
 }
 
 async function loadUsers() {

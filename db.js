@@ -4,8 +4,28 @@ const path = require('path');
 class JsonDB {
   constructor(filePath) {
     this.filePath = filePath;
-    this.data = { users: [], messages: [], deleted_messages: [], _counters: { users: 0, messages: 0 } };
+    this.data = { users: [], messages: [], deleted_messages: [], settings: { login_code: process.env.LOGIN_CODE || '0505' }, _counters: { users: 0, messages: 0 } };
     this._load();
+  }
+
+  _ensureSettings() {
+    if (!this.data.settings) this.data.settings = {};
+    if (!this.data.settings.login_code) {
+      this.data.settings.login_code = process.env.LOGIN_CODE || '0505';
+      this._save();
+    }
+  }
+
+  getLoginCode() {
+    this._ensureSettings();
+    return String(this.data.settings.login_code);
+  }
+
+  setLoginCode(code) {
+    this._ensureSettings();
+    this.data.settings.login_code = code;
+    this._save();
+    return code;
   }
 
   _load() {
@@ -19,6 +39,7 @@ class JsonDB {
     } else {
       this._save();
     }
+    this._ensureSettings();
   }
 
   _save() {

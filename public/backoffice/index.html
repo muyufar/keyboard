@@ -42,6 +42,22 @@
       </div>
     </div>
 
+    <div class="card">
+      <h2>Pengaturan Akses</h2>
+      <div id="settingsSuccess" class="success-msg"></div>
+      <div id="settingsError" class="error-msg"></div>
+      <form id="settingsForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="loginCodeSetting">Kode Akses Login</label>
+            <input type="text" id="loginCodeSetting" inputmode="numeric" maxlength="4" pattern="\d{4}" required placeholder="0505">
+            <p style="margin-top:6px;font-size:0.8rem;color:var(--text-muted)">Kode 4 digit yang dimasukkan user saat memilih karakter</p>
+          </div>
+          <button type="submit" class="btn btn-primary" style="height:46px">Simpan Kode</button>
+        </div>
+      </form>
+    </div>
+
     <!-- Register User Form -->
     <div class="card">
       <h2>Daftarkan User Baru</h2>

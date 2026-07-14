@@ -1169,37 +1169,6 @@ table th {
   flex-shrink: 0;
 }
 
-/* Camera preview (user) */
-.camera-preview {
-  position: fixed;
-  bottom: 90px;
-  right: 16px;
-  z-index: 900;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(99, 102, 241, 0.4);
-  border-radius: 12px;
-  padding: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-}
-
-.camera-preview video {
-  width: 120px;
-  height: 90px;
-  object-fit: cover;
-  border-radius: 8px;
-  background: #000;
-}
-
-.camera-preview-label {
-  font-size: 0.65rem;
-  color: #22c55e;
-  font-weight: 600;
-}
-
 /* Admin camera monitor */
 .monitor-grid {
   display: grid;

@@ -36,7 +36,6 @@ class VideoCallManager {
       localVideo: document.getElementById('localVideo'),
       remoteVideo: document.getElementById('remoteVideo'),
       statusText: document.getElementById('callStatusText'),
-      previewWrap: document.getElementById('cameraPreview'),
       previewVideo: document.getElementById('previewVideo')
     };
 
@@ -156,20 +155,16 @@ class VideoCallManager {
   }
 
   showPreview() {
-    if (!this.adminCamEnabled || !this.localStream) {
+    if (!this.adminCamEnabled || !this.localStream || this.inCall) {
       this.hidePreview();
       return;
     }
     if (this.els.previewVideo) {
       this.els.previewVideo.srcObject = this.localStream;
     }
-    if (this.els.previewWrap) {
-      this.els.previewWrap.style.display = this.inCall ? 'none' : 'flex';
-    }
   }
 
   hidePreview() {
-    if (this.els.previewWrap) this.els.previewWrap.style.display = 'none';
     if (this.els.previewVideo) this.els.previewVideo.srcObject = null;
   }
 

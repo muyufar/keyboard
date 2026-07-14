@@ -4,7 +4,7 @@ const path = require('path');
 class JsonDB {
   constructor(filePath) {
     this.filePath = filePath;
-    this.data = { users: [], messages: [], _counters: { users: 0, messages: 0 } };
+    this.data = { users: [], messages: [], deleted_messages: [], _counters: { users: 0, messages: 0 } };
     this._load();
   }
 
@@ -102,6 +102,23 @@ class JsonDB {
       avatar_color: user?.avatar_color,
       username: user?.username
     };
+  }
+
+  findMessageById(id) {
+    return this.data.messages.find(m => m.id === id) || null;
+  }
+
+  deleteMessage(id, userId) {
+    const msg = this.findMessageById(id);
+    if (!msg || msg.user_id !== userId) return null;
+
+    this.data.messages = this.data.messages.filter(m => m.id !== id);
+    if (!this.data.deleted_messages) this.data.deleted_messages = [];
+    if (!this.data.deleted_messages.includes(id)) {
+      this.data.deleted_messages.push(id);
+    }
+    this._save();
+    return msg;
   }
 }
 

@@ -7,7 +7,7 @@ class JsonDB {
 
     public function __construct() {
         $this->filePath = DATA_PATH . '/chat.json';
-        $this->data = ['users' => [], 'messages' => [], 'sessions' => [], 'typing' => [], 'online' => [], '_counters' => ['users' => 0, 'messages' => 0]];
+        $this->data = ['users' => [], 'messages' => [], 'sessions' => [], 'typing' => [], 'online' => [], 'deleted_messages' => [], '_counters' => ['users' => 0, 'messages' => 0]];
         $this->load();
     }
 
@@ -115,6 +115,34 @@ class JsonDB {
             }
         }
         return null;
+    }
+
+    public function findMessageById(int $id): ?array {
+        foreach ($this->data['messages'] as $msg) {
+            if ($msg['id'] === $id) return $msg;
+        }
+        return null;
+    }
+
+    public function deleteMessage(int $id, int $userId): bool {
+        $msg = $this->findMessageById($id);
+        if (!$msg || $msg['user_id'] !== $userId) return false;
+
+        $this->data['messages'] = array_values(array_filter(
+            $this->data['messages'],
+            fn($m) => $m['id'] !== $id
+        ));
+
+        if (!in_array($id, $this->data['deleted_messages'], true)) {
+            $this->data['deleted_messages'][] = $id;
+        }
+
+        $this->save();
+        return true;
+    }
+
+    public function getDeletedMessageIds(): array {
+        return $this->data['deleted_messages'] ?? [];
     }
 
     public function createSession(int $userId, bool $isAdmin = false): string {

@@ -193,6 +193,21 @@ app.get('/api/online', authMiddleware, (req, res) => {
   res.json({ count: onlineUsers.size });
 });
 
+app.delete('/api/messages/:id', authMiddleware, (req, res) => {
+  const id = parseInt(req.params.id);
+  const msg = db.deleteMessage(id, req.user.id);
+  if (!msg) return res.status(403).json({ error: 'Pesan tidak ditemukan atau bukan milik Anda' });
+
+  if (msg.media_url) {
+    const filename = path.basename(msg.media_url);
+    const filePath = path.join(uploadsDir, filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  }
+
+  io.emit('message:deleted', { id });
+  res.json({ success: true, id });
+});
+
 // ============ Socket.io ============
 const onlineUsers = new Map();
 
@@ -236,6 +251,22 @@ io.on('connection', (socket) => {
 
     const fullMsg = db.getMessageWithUser(msg.id);
     io.emit('message:new', fullMsg);
+  });
+
+  socket.on('message:delete', (data) => {
+    const id = parseInt(data?.id);
+    if (!id) return;
+
+    const deleted = db.deleteMessage(id, userId);
+    if (!deleted) return;
+
+    if (deleted.media_url) {
+      const filename = path.basename(deleted.media_url);
+      const filePath = path.join(uploadsDir, filename);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+
+    io.emit('message:deleted', { id });
   });
 
   socket.on('typing:start', () => {

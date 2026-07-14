@@ -21,6 +21,7 @@ if ($since > 0) {
 
 jsonResponse([
     'messages' => $newMessages,
+    'deleted' => $db->getDeletedMessageIds(),
     'typing' => $typing,
     'online' => $db->getOnlineCount()
 ]);

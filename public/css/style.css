@@ -298,6 +298,43 @@ body {
   border-radius: var(--radius);
   padding: 10px 14px;
   min-width: 60px;
+  position: relative;
+}
+
+.message:hover .delete-msg-btn {
+  opacity: 1;
+}
+
+.delete-msg-btn {
+  position: absolute;
+  top: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  color: white;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+  line-height: 1;
+  padding: 0;
+}
+
+.delete-msg-btn:hover {
+  background: var(--danger);
+}
+
+.message.own .delete-msg-btn {
+  left: 4px;
+}
+
+.message:not(.own) .delete-msg-btn {
+  right: 4px;
 }
 
 .message.own .message-content {

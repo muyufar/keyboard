@@ -140,6 +140,10 @@ async function poll() {
       scrollToBottom();
     }
 
+    if (data.deleted?.length) {
+      data.deleted.forEach(id => removeMessageFromDOM(id));
+    }
+
     if (data.typing?.length) {
       typingIndicator.textContent = data.typing.join(', ') + ' sedang mengetik...';
     } else {
@@ -182,9 +186,11 @@ function appendMessage(msg) {
   }
 
   const textHtml = msg.content ? `<div class="message-text">${escapeHtml(msg.content)}</div>` : '';
+  const deleteBtn = isOwn ? `<button class="delete-msg-btn" onclick="deleteMessage(${msg.id})" title="Hapus pesan">✕</button>` : '';
 
   if (isOwn) {
     div.innerHTML = `<div class="message-content">
+      ${deleteBtn}
       <div class="message-header"><span class="message-time">${time}</span><span class="message-sender">Anda</span></div>
       ${textHtml}${mediaHtml}
     </div>`;
@@ -214,6 +220,29 @@ function escapeHtml(text) {
 function scrollToBottom() {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
+
+function removeMessageFromDOM(id) {
+  const el = document.querySelector(`[data-id="${id}"]`);
+  if (el) el.remove();
+}
+
+async function deleteMessage(id) {
+  if (!confirm('Hapus pesan ini?')) return;
+
+  try {
+    const res = await fetch(API + '/delete-message.php?id=' + id, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.error);
+    removeMessageFromDOM(id);
+  } catch (err) {
+    alert('Gagal menghapus pesan: ' + err.message);
+  }
+}
+
+window.deleteMessage = deleteMessage;
 
 async function sendMessage() {
   const content = messageInput.value.trim();

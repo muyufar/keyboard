@@ -98,6 +98,10 @@ function connectSocket() {
     scrollToBottom();
   });
 
+  socket.on('message:deleted', (data) => {
+    removeMessageFromDOM(data.id);
+  });
+
   socket.on('typing:start', (data) => {
     if (data.userId !== currentUser.id) {
       typingIndicator.textContent = `${data.display_name} sedang mengetik...`;
@@ -165,10 +169,12 @@ function appendMessage(msg) {
   }
 
   const textHtml = msg.content ? `<div class="message-text">${escapeHtml(msg.content)}</div>` : '';
+  const deleteBtn = isOwn ? `<button class="delete-msg-btn" onclick="deleteMessage(${msg.id})" title="Hapus pesan">✕</button>` : '';
 
   if (isOwn) {
     div.innerHTML = `
       <div class="message-content">
+        ${deleteBtn}
         <div class="message-header">
           <span class="message-time">${time}</span>
           <span class="message-sender">Anda</span>
@@ -208,6 +214,30 @@ function escapeHtml(text) {
 function scrollToBottom() {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
+
+function removeMessageFromDOM(id) {
+  const el = document.querySelector(`[data-id="${id}"]`);
+  if (el) el.remove();
+}
+
+async function deleteMessage(id) {
+  if (!confirm('Hapus pesan ini?')) return;
+
+  try {
+    const token = localStorage.getItem('chat_token');
+    const res = await fetch(API + '/messages/' + id, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    removeMessageFromDOM(id);
+  } catch (err) {
+    alert('Gagal menghapus pesan: ' + err.message);
+  }
+}
+
+window.deleteMessage = deleteMessage;
 
 // Send message
 async function sendMessage() {

@@ -69,6 +69,16 @@ function mediaUrl(string $filename): string {
     return BASE_PATH . '/uploads/' . $filename;
 }
 
+function deleteMediaFile(?string $mediaUrl): void {
+    if (!$mediaUrl) return;
+    $prefix = BASE_PATH . '/uploads/';
+    if (strpos($mediaUrl, $prefix) !== 0 && strpos($mediaUrl, '/uploads/') === false) return;
+
+    $filename = basename($mediaUrl);
+    $path = UPLOADS_PATH . '/' . $filename;
+    if (is_file($path)) @unlink($path);
+}
+
 function uploadErrorMessage(int $code): string {
     $messages = [
         UPLOAD_ERR_INI_SIZE   => 'File melebihi batas upload server (upload_max_filesize)',

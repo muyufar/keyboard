@@ -88,6 +88,7 @@ class JsonDB {
             'media_type' => $data['media_type'] ?? null,
             'media_url' => $data['media_url'] ?? null,
             'media_name' => $data['media_name'] ?? null,
+            'reply_to_id' => $data['reply_to_id'] ?? null,
             'created_at' => date('c')
         ];
         $this->data['messages'][] = $msg;
@@ -104,17 +105,34 @@ class JsonDB {
     }
 
     public function getMessageWithUser(int $id): ?array {
-        foreach ($this->data['messages'] as $msg) {
-            if ($msg['id'] === $id) {
-                $user = $this->findUserById($msg['user_id']);
-                return array_merge($msg, [
-                    'display_name' => $user['display_name'] ?? '',
-                    'avatar_color' => $user['avatar_color'] ?? '#6366f1',
-                    'username' => $user['username'] ?? ''
-                ]);
+        $msg = $this->findMessageById($id);
+        return $msg ? $this->enrichMessage($msg) : null;
+    }
+
+    public function enrichMessage(array $msg): array {
+        $user = $this->findUserById($msg['user_id']);
+        $result = array_merge($msg, [
+            'display_name' => $user['display_name'] ?? '',
+            'avatar_color' => $user['avatar_color'] ?? '#6366f1',
+            'username' => $user['username'] ?? ''
+        ]);
+
+        if (!empty($msg['reply_to_id'])) {
+            $replyMsg = $this->findMessageById((int)$msg['reply_to_id']);
+            if ($replyMsg) {
+                $replyUser = $this->findUserById($replyMsg['user_id']);
+                $result['reply_to'] = [
+                    'id' => $replyMsg['id'],
+                    'user_id' => $replyMsg['user_id'],
+                    'display_name' => $replyUser['display_name'] ?? 'User',
+                    'content' => $replyMsg['content'],
+                    'media_type' => $replyMsg['media_type'] ?? null,
+                    'media_name' => $replyMsg['media_name'] ?? null
+                ];
             }
         }
-        return null;
+
+        return $result;
     }
 
     public function findMessageById(int $id): ?array {

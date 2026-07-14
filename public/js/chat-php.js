@@ -6,6 +6,7 @@ let isTyping = false;
 let pollTimer = null;
 let lastMessageId = 0;
 let videoCall = null;
+let replyTo = null;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -29,6 +30,10 @@ const lightbox = $('#lightbox');
 const lightboxImg = $('#lightboxImg');
 const uploadProgress = $('#uploadProgress');
 const uploadProgressBar = $('#uploadProgressBar');
+const replyPreview = $('#replyPreview');
+const replyPreviewName = $('#replyPreviewName');
+const replyPreviewText = $('#replyPreviewText');
+const cancelReply = $('#cancelReply');
 
 function authHeaders() {
   return { Authorization: 'Bearer ' + localStorage.getItem('chat_token') };
@@ -113,6 +118,7 @@ function showChat() {
   });
 
   loadMessages().then(() => startPolling());
+  ChatNotify.init();
 }
 
 window.onVideoCallStart = () => startPolling();
@@ -153,6 +159,7 @@ async function poll() {
         if (!document.querySelector(`[data-id="${msg.id}"]`)) {
           appendMessage(msg);
           lastMessageId = Math.max(lastMessageId, msg.id);
+          ChatNotify.notifyMessage(msg, currentUser.id);
         }
       });
       scrollToBottom();
@@ -219,20 +226,23 @@ function appendMessage(msg) {
   }
 
   const textHtml = msg.content ? `<div class="message-text">${escapeHtml(msg.content)}</div>` : '';
+  const replyHtml = buildReplyQuoteHtml(msg.reply_to, isOwn);
   const deleteBtn = isOwn ? `<button class="delete-msg-btn" onclick="deleteMessage(${msg.id})" title="Hapus pesan">✕</button>` : '';
+  const replyBtn = `<button class="reply-msg-btn" onclick="startReply(${msg.id})" title="Balas pesan">↩</button>`;
 
   if (isOwn) {
     div.innerHTML = `<div class="message-content">
-      ${deleteBtn}
+      ${deleteBtn}${replyBtn}
       <div class="message-header"><span class="message-time">${time}</span><span class="message-sender">Anda</span></div>
-      ${textHtml}${mediaHtml}
+      ${replyHtml}${textHtml}${mediaHtml}
     </div>`;
   } else {
     div.innerHTML = `
       <div class="avatar avatar-sm" style="background:${msg.avatar_color}">${initial}</div>
       <div class="message-content">
+        ${replyBtn}
         <div class="message-header"><span class="message-sender">${escapeHtml(msg.display_name)}</span><span class="message-time">${time}</span></div>
-        ${textHtml}${mediaHtml}
+        ${replyHtml}${textHtml}${mediaHtml}
       </div>`;
   }
 
@@ -276,6 +286,47 @@ async function deleteMessage(id) {
 }
 
 window.deleteMessage = deleteMessage;
+
+function startReply(id) {
+  const el = document.querySelector(`[data-id="${id}"]`);
+  if (!el) return;
+
+  const sender = el.querySelector('.message-sender')?.textContent || 'User';
+  const textEl = el.querySelector('.message-text');
+  const mediaEl = el.querySelector('.message-media');
+
+  replyTo = {
+    id,
+    display_name: sender === 'Anda' ? currentUser.display_name : sender,
+    content: textEl?.textContent || null,
+    media_type: mediaEl?.querySelector('img') ? 'image'
+      : mediaEl?.querySelector('video') ? 'video'
+      : mediaEl?.querySelector('audio') ? 'audio' : null
+  };
+
+  replyPreviewName.textContent = replyTo.display_name;
+  replyPreviewText.textContent = getMessagePreview(replyTo);
+  replyPreview.classList.add('active');
+  messageInput.focus();
+}
+
+function clearReply() {
+  replyTo = null;
+  replyPreview.classList.remove('active');
+}
+
+cancelReply.addEventListener('click', clearReply);
+
+function scrollToMessage(id) {
+  const el = document.querySelector(`[data-id="${id}"]`);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('message-highlight');
+  setTimeout(() => el.classList.remove('message-highlight'), 1500);
+}
+
+window.startReply = startReply;
+window.scrollToMessage = scrollToMessage;
 
 async function sendMessage() {
   const content = messageInput.value.trim();
@@ -322,7 +373,8 @@ async function sendMessage() {
         content: content || null,
         media_type: mediaData?.media_type || null,
         media_url: mediaData?.media_url || null,
-        media_name: mediaData?.media_name || null
+        media_name: mediaData?.media_name || null,
+        reply_to_id: replyTo?.id || null
       })
     });
     const msg = await parseJsonResponse(res);
@@ -340,6 +392,7 @@ async function sendMessage() {
   messageInput.value = '';
   messageInput.style.height = 'auto';
   sendBtn.disabled = false;
+  clearReply();
   stopTyping();
 }
 

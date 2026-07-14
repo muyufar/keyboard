@@ -9,17 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $since = isset($_GET['since']) ? (int)$_GET['since'] : null;
 
     $messages = $db->getMessages($limit, $before, $since);
-    $result = [];
-
-    foreach ($messages as $msg) {
-        $u = $db->findUserById($msg['user_id']);
-        $result[] = array_merge($msg, [
-            'display_name' => $u['display_name'] ?? '',
-            'avatar_color' => $u['avatar_color'] ?? '#6366f1',
-            'username' => $u['username'] ?? ''
-        ]);
-    }
-
+    $result = array_map(fn($msg) => $db->enrichMessage($msg), $messages);
     jsonResponse($result);
 }
 
@@ -29,15 +19,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mediaType = $input['media_type'] ?? null;
     $mediaUrl = $input['media_url'] ?? null;
     $mediaName = $input['media_name'] ?? null;
+    $replyToId = isset($input['reply_to_id']) ? (int)$input['reply_to_id'] : null;
 
     if (!$content && !$mediaUrl) jsonResponse(['error' => 'Pesan kosong'], 400);
+
+    if ($replyToId && !$db->findMessageById($replyToId)) {
+        jsonResponse(['error' => 'Pesan yang dibalas tidak ditemukan'], 404);
+    }
 
     $msg = $db->createMessage([
         'user_id' => $user['id'],
         'content' => $content,
         'media_type' => $mediaType,
         'media_url' => $mediaUrl,
-        'media_name' => $mediaName
+        'media_name' => $mediaName,
+        'reply_to_id' => $replyToId
     ]);
 
     jsonResponse($db->getMessageWithUser($msg['id']), 201);

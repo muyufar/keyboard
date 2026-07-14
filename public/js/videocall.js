@@ -170,6 +170,7 @@ class VideoCallManager {
     this.els.incomingAvatar.style.background = this.peerColor;
     this.els.incomingName.textContent = this.peerName + ' memanggil...';
     this.els.incoming.style.display = 'flex';
+    window.ChatNotify?.notifyIncomingCall(this.peerName);
   }
 
   async acceptCall() {

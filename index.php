@@ -39,6 +39,7 @@
         <div class="avatar" id="userAvatar"></div>
         <span id="userDisplayName"></span>
         <button class="video-call-btn" id="videoCallBtn" title="Video Call">📹</button>
+        <button class="video-call-btn" id="notifyBtn" title="Notifikasi">🔔</button>
         <button class="logout-btn" id="logoutBtn">Keluar</button>
       </div>
     </header>
@@ -47,6 +48,14 @@
     <div class="typing-indicator" id="typingIndicator"></div>
 
     <div class="chat-input-area">
+      <div class="reply-preview" id="replyPreview">
+        <div class="reply-preview-bar"></div>
+        <div class="reply-preview-content">
+          <span class="reply-preview-label">Balas <strong id="replyPreviewName"></strong></span>
+          <span class="reply-preview-text" id="replyPreviewText"></span>
+        </div>
+        <button class="remove-attachment" id="cancelReply" title="Batal balas">&times;</button>
+      </div>
       <div class="upload-progress" id="uploadProgress">
         <div class="upload-progress-bar" id="uploadProgressBar"></div>
       </div>
@@ -104,6 +113,7 @@
   </div>
 
   <script>const BASE = '<?= BASE_PATH ?>';</script>
+  <script src="<?= BASE_PATH ?>/public/js/notifications.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/videocall.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/chat-php.js"></script>
 </body>

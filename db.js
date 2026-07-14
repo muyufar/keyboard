@@ -70,7 +70,7 @@ class JsonDB {
   }
 
   // Messages
-  createMessage({ user_id, content, media_type, media_url, media_name }) {
+  createMessage({ user_id, content, media_type, media_url, media_name, reply_to_id }) {
     const msg = {
       id: ++this.data._counters.messages,
       user_id,
@@ -78,6 +78,7 @@ class JsonDB {
       media_type: media_type || null,
       media_url: media_url || null,
       media_name: media_name || null,
+      reply_to_id: reply_to_id || null,
       created_at: new Date().toISOString()
     };
     this.data.messages.push(msg);
@@ -93,15 +94,35 @@ class JsonDB {
   }
 
   getMessageWithUser(id) {
-    const msg = this.data.messages.find(m => m.id === id);
-    if (!msg) return null;
+    const msg = this.findMessageById(id);
+    return msg ? this.enrichMessage(msg) : null;
+  }
+
+  enrichMessage(msg) {
     const user = this.findUserById(msg.user_id);
-    return {
+    const result = {
       ...msg,
       display_name: user?.display_name,
       avatar_color: user?.avatar_color,
       username: user?.username
     };
+
+    if (msg.reply_to_id) {
+      const replyMsg = this.findMessageById(msg.reply_to_id);
+      if (replyMsg) {
+        const replyUser = this.findUserById(replyMsg.user_id);
+        result.reply_to = {
+          id: replyMsg.id,
+          user_id: replyMsg.user_id,
+          display_name: replyUser?.display_name || 'User',
+          content: replyMsg.content,
+          media_type: replyMsg.media_type,
+          media_name: replyMsg.media_name
+        };
+      }
+    }
+
+    return result;
   }
 
   findMessageById(id) {

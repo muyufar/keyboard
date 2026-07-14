@@ -166,15 +166,7 @@ app.get('/api/messages', authMiddleware, (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
   const before = req.query.before ? parseInt(req.query.before) : null;
 
-  const messages = db.getMessages({ limit, before }).map(msg => {
-    const user = db.findUserById(msg.user_id);
-    return {
-      ...msg,
-      display_name: user?.display_name,
-      avatar_color: user?.avatar_color,
-      username: user?.username
-    };
-  });
+  const messages = db.getMessages({ limit, before }).map(msg => db.enrichMessage(msg));
 
   res.json(messages);
 });
@@ -279,15 +271,18 @@ io.on('connection', (socket) => {
   });
 
   socket.on('message:send', (data) => {
-    const { content, media_type, media_url, media_name } = data;
+    const { content, media_type, media_url, media_name, reply_to_id } = data;
     if (!content && !media_url) return;
+
+    if (reply_to_id && !db.findMessageById(parseInt(reply_to_id))) return;
 
     const msg = db.createMessage({
       user_id: userId,
       content,
       media_type,
       media_url,
-      media_name
+      media_name,
+      reply_to_id: reply_to_id ? parseInt(reply_to_id) : null
     });
 
     const fullMsg = db.getMessageWithUser(msg.id);

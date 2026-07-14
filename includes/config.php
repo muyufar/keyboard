@@ -31,16 +31,20 @@ if (in_array(basename($basePath), ['api', 'backoffice'], true)) {
 }
 define('BASE_PATH', $basePath === '' || $basePath === '.' ? '' : $basePath);
 
-function jsonError(string $message, int $code = 500): void {
+function jsonError($message, $code = 500) {
     http_response_code($code);
-    header('Content-Type: application/json; charset=utf-8');
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
     echo json_encode(['error' => $message], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-set_exception_handler(function (Throwable $e) {
-    jsonError('Server error: ' . $e->getMessage(), 500);
-});
+if (function_exists('set_exception_handler')) {
+    set_exception_handler(function ($e) {
+        jsonError('Server error: ' . $e->getMessage(), 500);
+    });
+}
 
 register_shutdown_function(function () {
     $err = error_get_last();

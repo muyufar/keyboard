@@ -1,16 +1,22 @@
 <?php
 /**
- * Endpoint ringan — hanya baca chat.json, tanpa JsonDB/locking.
- * Mencegah hang di shared hosting saat load karakter login.
+ * Endpoint mandiri untuk daftar karakter login.
+ * Tidak memuat config/db agar stabil di shared hosting (cPanel).
  */
-require_once __DIR__ . '/../includes/config.php';
-require_once __DIR__ . '/../includes/characters.php';
-
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 header('Access-Control-Allow-Origin: *');
 
-function charsResponse($data, int $code = 200): void {
+$CHARACTERS = [
+    'librarian' => ['name' => 'Pustakawan', 'title' => 'Ahli buku', 'color' => '#4a90d9'],
+    'student'   => ['name' => 'Pelajar', 'title' => 'Pencari ilmu', 'color' => '#22c55e'],
+    'merchant'  => ['name' => 'Pedagang', 'title' => 'Jual beli buku', 'color' => '#f97316'],
+    'writer'    => ['name' => 'Penulis', 'title' => 'Pena giat', 'color' => '#a855f7'],
+    'reader'    => ['name' => 'Pembaca', 'title' => 'Kutu buku', 'color' => '#ec4899'],
+    'courier'   => ['name' => 'Kurir', 'title' => 'Antar pesanan', 'color' => '#ef4444'],
+];
+
+function send_characters_json($data, $code = 200) {
     http_response_code($code);
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
@@ -18,17 +24,20 @@ function charsResponse($data, int $code = 200): void {
 
 try {
     $charUsers = [];
-    $file = DATA_PATH . '/chat.json';
+    $root = dirname(__DIR__);
+    $file = $root . '/data/chat.json';
 
-    if (is_readable($file)) {
-        $raw = @file_get_contents($file);
-        if ($raw) {
+    if (file_exists($file) && is_readable($file)) {
+        $raw = file_get_contents($file);
+        if ($raw !== false && $raw !== '') {
             $db = json_decode($raw, true);
-            if (is_array($db)) {
-                foreach ((array)($db['users'] ?? []) as $user) {
-                    if (!is_array($user)) continue;
-                    $cid = $user['character_id'] ?? '';
-                    if ($cid) {
+            if (is_array($db) && !empty($db['users']) && is_array($db['users'])) {
+                foreach ($db['users'] as $user) {
+                    if (!is_array($user)) {
+                        continue;
+                    }
+                    $cid = isset($user['character_id']) ? $user['character_id'] : '';
+                    if ($cid !== '') {
                         $charUsers[$cid] = $user;
                     }
                 }
@@ -37,19 +46,20 @@ try {
     }
 
     $chars = [];
-    foreach (CHARACTERS as $id => $meta) {
-        $user = $charUsers[$id] ?? null;
+    foreach ($CHARACTERS as $id => $meta) {
+        $user = isset($charUsers[$id]) ? $charUsers[$id] : null;
+        $active = $user && !empty($user['is_active']);
         $chars[] = [
             'id' => $id,
             'name' => $meta['name'],
             'title' => $meta['title'],
             'color' => $meta['color'],
-            'available' => $user && !empty($user['is_active']),
-            'display_name' => $user ? ($user['display_name'] ?? null) : null
+            'available' => $active,
+            'display_name' => $user ? (isset($user['display_name']) ? $user['display_name'] : null) : null,
         ];
     }
 
-    charsResponse($chars);
-} catch (Throwable $e) {
-    charsResponse(['error' => 'Gagal memuat karakter: ' . $e->getMessage()], 500);
+    send_characters_json($chars);
+} catch (Exception $e) {
+    send_characters_json(['error' => 'Gagal memuat karakter: ' . $e->getMessage()], 500);
 }

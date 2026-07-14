@@ -45,7 +45,7 @@ function requireAuth(): array {
     $user = $db->findUserById($session['user_id']);
     if (!$user || !$user['is_active']) jsonResponse(['error' => 'User tidak aktif'], 401);
 
-    $db->setOnline($user['id']);
+    $db->touchUserActivity($user['id'], $token);
     return $user;
 }
 

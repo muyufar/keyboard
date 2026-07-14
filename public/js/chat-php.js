@@ -5,6 +5,9 @@ let typingTimeout = null;
 let isTyping = false;
 let pollTimer = null;
 let lastMessageId = 0;
+let pollInFlight = false;
+let pollErrors = 0;
+let pollingActive = false;
 let videoCall = null;
 let replyTo = null;
 
@@ -131,6 +134,9 @@ enterBtn.addEventListener('click', async () => {
 
 $('#logoutBtn').addEventListener('click', () => {
   stopPolling();
+  pollingActive = false;
+  pollErrors = 0;
+  hideConnectionBanner();
   videoCall?.cleanup();
   videoCall = null;
   localStorage.removeItem('chat_token');
@@ -178,24 +184,82 @@ function showChat() {
     }
   });
 
-  loadMessages().then(() => startPolling());
+  loadMessages().then(() => {
+    if (!pollingActive) {
+      startPolling();
+      pollingActive = true;
+    }
+  });
   ChatNotify.init();
+}
+
+function ensureConnectionBanner() {
+  let banner = document.getElementById('connectionBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'connectionBanner';
+    banner.className = 'connection-banner';
+    banner.innerHTML = '<span id="connectionBannerText"></span><button type="button" id="connectionRelogin" class="btn btn-outline btn-sm" style="display:none">Login Ulang</button>';
+    chatScreen.insertBefore(banner, chatScreen.firstChild);
+    $('#connectionRelogin')?.addEventListener('click', () => $('#logoutBtn').click());
+  }
+  return banner;
+}
+
+function showConnectionBanner(text, showRelogin = false) {
+  const banner = ensureConnectionBanner();
+  $('#connectionBannerText').textContent = text;
+  const btn = $('#connectionRelogin');
+  if (btn) btn.style.display = showRelogin ? 'inline-flex' : 'none';
+  banner.style.display = 'flex';
+}
+
+function hideConnectionBanner() {
+  const banner = document.getElementById('connectionBanner');
+  if (banner) banner.style.display = 'none';
+}
+
+function handleSessionExpired() {
+  stopPolling();
+  showConnectionBanner('Sesi berakhir. Silakan login ulang.', true);
 }
 
 window.onVideoCallStart = () => startPolling();
 window.onVideoCallEnd = () => startPolling();
 
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && currentUser && chatScreen.style.display !== 'none') {
+    loadMessages();
+    startPolling();
+  }
+});
+
 async function loadMessages() {
   try {
     const res = await fetch(API + '/messages.php?limit=50', { headers: authHeaders() });
-    if (res.status === 401) { $('#logoutBtn').click(); return; }
-    const messages = await res.json();
+    if (res.status === 401) { handleSessionExpired(); return false; }
+    if (!res.ok) throw new Error('Gagal memuat pesan (' + res.status + ')');
+
+    const messages = await parseJsonResponse(res);
+    if (!Array.isArray(messages)) throw new Error('Format pesan tidak valid');
+
+    if (!messages.length && messagesContainer.children.length > 0) {
+      console.warn('Server mengembalikan 0 pesan, mempertahankan tampilan');
+      return true;
+    }
+
     messagesContainer.innerHTML = '';
     messages.forEach(appendMessage);
     if (messages.length) lastMessageId = messages[messages.length - 1].id;
+    pollErrors = 0;
+    hideConnectionBanner();
     scrollToBottom();
+    return true;
   } catch (err) {
+    pollErrors++;
     console.error('Gagal memuat pesan:', err);
+    showConnectionBanner('Koneksi terganggu. Mencoba menyambung kembali...');
+    return false;
   }
 }
 
@@ -210,10 +274,15 @@ function stopPolling() {
 }
 
 async function poll() {
+  if (pollInFlight) return;
+  pollInFlight = true;
+
   try {
     const res = await fetch(API + '/poll.php?since=' + lastMessageId, { headers: authHeaders() });
-    if (res.status === 401) { $('#logoutBtn').click(); return; }
-    const data = await res.json();
+    if (res.status === 401) { handleSessionExpired(); return; }
+    if (!res.ok) throw new Error('Poll gagal (' + res.status + ')');
+
+    const data = await parseJsonResponse(res);
 
     if (data.messages?.length) {
       data.messages.forEach(msg => {
@@ -252,8 +321,18 @@ async function poll() {
         });
       }
     }
+
+    pollErrors = 0;
+    hideConnectionBanner();
   } catch (err) {
+    pollErrors++;
     console.error('Poll error:', err);
+    if (pollErrors >= 3) {
+      showConnectionBanner('Koneksi lambat. Menyegarkan pesan...');
+      await loadMessages();
+    }
+  } finally {
+    pollInFlight = false;
   }
 }
 

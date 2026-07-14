@@ -7,8 +7,23 @@ class JsonDB {
 
     public function __construct() {
         $this->filePath = DATA_PATH . '/chat.json';
-        $this->data = ['users' => [], 'messages' => [], 'sessions' => [], 'typing' => [], 'online' => [], 'deleted_messages' => [], 'call_signals' => [], 'settings' => ['login_code' => LOGIN_CODE], '_counters' => ['users' => 0, 'messages' => 0, 'signals' => 0]];
+        $this->data = $this->defaultData();
         $this->load();
+    }
+
+    private function defaultData(): array {
+        return [
+            'users' => [],
+            'messages' => [],
+            'sessions' => [],
+            'typing' => [],
+            'online' => [],
+            'deleted_messages' => [],
+            'call_signals' => [],
+            'settings' => ['login_code' => LOGIN_CODE],
+            '_counters' => ['users' => 0, 'messages' => 0, 'signals' => 0],
+            '_meta' => ['last_activity_save' => 0]
+        ];
     }
 
     private function ensureSettings(): void {
@@ -35,20 +50,124 @@ class JsonDB {
 
     private function load(): void {
         if (!is_dir(DATA_PATH)) mkdir(DATA_PATH, 0755, true);
-        if (file_exists($this->filePath)) {
-            $content = file_get_contents($this->filePath);
-            $decoded = json_decode($content, true);
-            if (is_array($decoded)) {
-                $this->data = array_merge($this->data, $decoded);
-            }
-        } else {
+        if (!file_exists($this->filePath)) {
             $this->save();
+            $this->ensureSettings();
+            return;
+        }
+
+        $content = $this->readFileLocked();
+        $decoded = json_decode($content, true);
+        if (!is_array($decoded)) {
+            $backup = $this->filePath . '.bak';
+            if (file_exists($backup)) {
+                $decoded = json_decode(file_get_contents($backup), true);
+            }
+        }
+
+        if (is_array($decoded)) {
+            $this->data = array_merge($this->defaultData(), $decoded);
         }
         $this->ensureSettings();
     }
 
+    private function readFileLocked(): string {
+        $fp = @fopen($this->filePath, 'r');
+        if (!$fp) return file_get_contents($this->filePath) ?: '';
+        flock($fp, LOCK_SH);
+        $content = stream_get_contents($fp);
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        return $content ?: '';
+    }
+
+    private function mergeData(array $base, array $incoming): array {
+        $merged = array_merge($this->defaultData(), $base);
+
+        $messages = [];
+        foreach ($merged['messages'] as $m) $messages[$m['id']] = $m;
+        foreach ($incoming['messages'] ?? [] as $m) $messages[$m['id']] = $m;
+        ksort($messages);
+        $merged['messages'] = array_values($messages);
+
+        $users = [];
+        foreach ($merged['users'] as $u) $users[$u['id']] = $u;
+        foreach ($incoming['users'] ?? [] as $u) $users[$u['id']] = $u;
+        $merged['users'] = array_values($users);
+
+        $merged['sessions'] = array_merge($merged['sessions'], $incoming['sessions'] ?? []);
+
+        $online = $merged['online'];
+        foreach ($incoming['online'] ?? [] as $uid => $ts) {
+            $online[$uid] = max((int)($online[$uid] ?? 0), (int)$ts);
+        }
+        $merged['online'] = $online;
+
+        $merged['typing'] = array_merge($merged['typing'], $incoming['typing'] ?? []);
+        $merged['deleted_messages'] = array_values(array_unique(array_merge(
+            $merged['deleted_messages'],
+            $incoming['deleted_messages'] ?? []
+        )));
+        if (count($merged['deleted_messages']) > 100) {
+            $merged['deleted_messages'] = array_slice($merged['deleted_messages'], -100);
+        }
+
+        $merged['call_signals'] = array_merge($merged['call_signals'], $incoming['call_signals'] ?? []);
+        if (count($merged['call_signals']) > 200) {
+            $merged['call_signals'] = array_slice($merged['call_signals'], -100);
+        }
+
+        $merged['settings'] = array_merge($merged['settings'], $incoming['settings'] ?? []);
+        $merged['_meta'] = array_merge($merged['_meta'], $incoming['_meta'] ?? []);
+
+        foreach (['users', 'messages', 'signals'] as $key) {
+            $merged['_counters'][$key] = max(
+                (int)($merged['_counters'][$key] ?? 0),
+                (int)($incoming['_counters'][$key] ?? 0)
+            );
+        }
+
+        return $merged;
+    }
+
     public function save(): void {
-        file_put_contents($this->filePath, json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
+        $fp = @fopen($this->filePath, 'c+');
+        if (!$fp) {
+            file_put_contents(
+                $this->filePath,
+                json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+                LOCK_EX
+            );
+            return;
+        }
+
+        flock($fp, LOCK_EX);
+        rewind($fp);
+        $existing = stream_get_contents($fp);
+        if ($existing) {
+            $decoded = json_decode($existing, true);
+            if (is_array($decoded)) {
+                $this->data = $this->mergeData($decoded, $this->data);
+            }
+        }
+
+        $json = json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        ftruncate($fp, 0);
+        rewind($fp);
+        fwrite($fp, $json);
+        fflush($fp);
+        flock($fp, LOCK_UN);
+        fclose($fp);
+
+        @copy($this->filePath, $this->filePath . '.bak');
+    }
+
+    private function saveThrottled(string $key, int $seconds): void {
+        if (!isset($this->data['_meta'])) $this->data['_meta'] = [];
+        $last = (int)($this->data['_meta'][$key] ?? 0);
+        if (time() - $last < $seconds) return;
+        $this->data['_meta'][$key] = time();
+        $this->save();
     }
 
     public function findUserByUsername(string $username): ?array {
@@ -205,6 +324,9 @@ class JsonDB {
         if (!in_array($id, $this->data['deleted_messages'], true)) {
             $this->data['deleted_messages'][] = $id;
         }
+        if (count($this->data['deleted_messages']) > 100) {
+            $this->data['deleted_messages'] = array_slice($this->data['deleted_messages'], -100);
+        }
 
         $this->save();
         return true;
@@ -230,16 +352,26 @@ class JsonDB {
         $session = $this->data['sessions'][$token];
         if ($session['expires'] < time()) {
             unset($this->data['sessions'][$token]);
-            $this->save();
+            $this->saveThrottled('session_cleanup', 60);
             return null;
         }
         return $session;
     }
 
-    public function setOnline(int $userId): void {
+    public function touchUserActivity(int $userId, string $token): void {
         $this->data['online'][(string)$userId] = time();
         $this->cleanupOnline();
-        $this->save();
+
+        if ($token && isset($this->data['sessions'][$token])) {
+            $isAdmin = !empty($this->data['sessions'][$token]['is_admin']);
+            $this->data['sessions'][$token]['expires'] = time() + ($isAdmin ? 86400 : 604800);
+        }
+
+        $this->saveThrottled('last_activity_save', 20);
+    }
+
+    public function setOnline(int $userId): void {
+        $this->touchUserActivity($userId, '');
     }
 
     public function getOnlineCount(): int {
@@ -303,7 +435,9 @@ class JsonDB {
         }
 
         $this->data['call_signals'] = $rest;
-        $this->save();
+        if (!empty($mine)) {
+            $this->save();
+        }
         return $mine;
     }
 
@@ -317,12 +451,12 @@ class JsonDB {
     public function setTyping(int $userId, string $displayName): void {
         $this->data['typing'][(string)$userId] = ['name' => $displayName, 'time' => time()];
         $this->cleanupTyping();
-        $this->save();
+        $this->saveThrottled('typing_save', 3);
     }
 
     public function clearTyping(int $userId): void {
         unset($this->data['typing'][(string)$userId]);
-        $this->save();
+        $this->saveThrottled('typing_save', 3);
     }
 
     public function getTypingUsers(int $excludeUserId): array {

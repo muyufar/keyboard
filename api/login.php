@@ -22,7 +22,7 @@ if (!$user || !$user['is_active']) {
 }
 
 $token = $db->createSession($user['id']);
-$db->setOnline($user['id']);
+$db->touchUserActivity($user['id'], $token);
 
 jsonResponse([
     'token' => $token,

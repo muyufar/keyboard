@@ -56,7 +56,7 @@ class JsonDB {
             return;
         }
 
-        $content = $this->readFileLocked();
+        $content = @file_get_contents($this->filePath) ?: '';
         $decoded = json_decode($content, true);
         if (!is_array($decoded)) {
             $backup = $this->filePath . '.bak';
@@ -71,14 +71,35 @@ class JsonDB {
         $this->ensureSettings();
     }
 
-    private function readFileLocked(): string {
-        $fp = @fopen($this->filePath, 'r');
-        if (!$fp) return file_get_contents($this->filePath) ?: '';
-        flock($fp, LOCK_SH);
-        $content = stream_get_contents($fp);
-        flock($fp, LOCK_UN);
-        fclose($fp);
-        return $content ?: '';
+    public function save(): bool {
+        try {
+            if (!is_dir(DATA_PATH)) {
+                @mkdir(DATA_PATH, 0755, true);
+            }
+
+            // Merge cepat tanpa flock (hindari hang di shared hosting)
+            if (file_exists($this->filePath)) {
+                $existing = @file_get_contents($this->filePath);
+                if ($existing) {
+                    $decoded = json_decode($existing, true);
+                    if (is_array($decoded)) {
+                        $this->data = $this->mergeData($decoded, $this->data);
+                    }
+                }
+            }
+
+            $json = json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            if ($json === false) return false;
+
+            $written = @file_put_contents($this->filePath, $json, LOCK_EX);
+            if ($written === false) return false;
+
+            @copy($this->filePath, $this->filePath . '.bak');
+            return true;
+        } catch (Throwable $e) {
+            error_log('JsonDB save failed: ' . $e->getMessage());
+            return false;
+        }
     }
 
     private function mergeData(array $base, array $incoming): array {
@@ -155,49 +176,6 @@ class JsonDB {
         }
 
         return $merged;
-    }
-
-    public function save(): bool {
-        try {
-            if (!is_dir(DATA_PATH)) {
-                @mkdir(DATA_PATH, 0755, true);
-            }
-
-            $fp = @fopen($this->filePath, 'c+');
-            if (!$fp) {
-                return (bool)@file_put_contents(
-                    $this->filePath,
-                    json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
-                    LOCK_EX
-                );
-            }
-
-            flock($fp, LOCK_EX);
-            rewind($fp);
-            $existing = stream_get_contents($fp);
-            if ($existing) {
-                $decoded = json_decode($existing, true);
-                if (is_array($decoded)) {
-                    $this->data = $this->mergeData($decoded, $this->data);
-                }
-            }
-
-            $json = json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-            if ($json === false) return false;
-
-            ftruncate($fp, 0);
-            rewind($fp);
-            fwrite($fp, $json);
-            fflush($fp);
-            flock($fp, LOCK_UN);
-            fclose($fp);
-
-            @copy($this->filePath, $this->filePath . '.bak');
-            return true;
-        } catch (Throwable $e) {
-            error_log('JsonDB save failed: ' . $e->getMessage());
-            return false;
-        }
     }
 
     private function saveThrottled(string $key, int $seconds): void {

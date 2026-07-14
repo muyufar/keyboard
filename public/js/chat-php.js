@@ -49,7 +49,7 @@ function authHeaders() {
 async function parseJsonResponse(res) {
   const text = await res.text();
   if (!text) {
-    throw new Error('Server tidak merespons. Cek permission folder uploads/ (chmod 755)');
+    throw new Error('Server tidak merespons (kosong). Cek permission folder data/ dan uploads/ (chmod 755).');
   }
   try {
     return JSON.parse(text);

@@ -265,6 +265,13 @@ body {
   scroll-behavior: smooth;
 }
 
+.load-older-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 12px;
+  flex-shrink: 0;
+}
+
 .messages-container::-webkit-scrollbar {
   width: 6px;
 }

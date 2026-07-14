@@ -6,6 +6,10 @@ let typingTimeout = null;
 let isTyping = false;
 let videoCall = null;
 let replyTo = null;
+let hasMoreOlder = false;
+let loadingOlder = false;
+const MESSAGES_PAGE_SIZE = 100;
+const MESSAGES_MAX_TOTAL = 500;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -220,22 +224,136 @@ function connectSocket() {
   });
 }
 
-async function loadMessages() {
+async function fetchMessagePage(before = null) {
   const token = localStorage.getItem('chat_token');
+  let url = API + '/api/messages?limit=' + MESSAGES_PAGE_SIZE;
+  if (before) url += '&before=' + before;
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+  if (!res.ok) throw new Error('Gagal memuat pesan (' + res.status + ')');
+  const messages = await res.json();
+  if (!Array.isArray(messages)) throw new Error('Format pesan tidak valid');
+  return messages;
+}
+
+function ensureLoadOlderUI() {
+  if (document.getElementById('loadOlderWrap')) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'loadOlderWrap';
+  wrap.className = 'load-older-wrap';
+  wrap.innerHTML = '<button type="button" id="loadOlderBtn" class="btn btn-outline btn-sm">Muat pesan lebih lama</button>';
+  messagesContainer.prepend(wrap);
+  $('#loadOlderBtn')?.addEventListener('click', loadOlderMessages);
+}
+
+function updateLoadOlderUI(loading = false) {
+  const wrap = document.getElementById('loadOlderWrap');
+  const btn = document.getElementById('loadOlderBtn');
+  if (!wrap || !btn) return;
+  if (!hasMoreOlder) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+  btn.disabled = loading;
+  btn.textContent = loading ? 'Memuat...' : 'Muat pesan lebih lama';
+}
+
+function getOldestMessageId() {
+  const first = messagesContainer.querySelector('.message[data-id]');
+  return first ? parseInt(first.dataset.id, 10) : null;
+}
+
+async function loadOlderMessages() {
+  if (loadingOlder || !hasMoreOlder) return;
+  const before = getOldestMessageId();
+  if (!before) return;
+
+  loadingOlder = true;
+  updateLoadOlderUI(true);
+
   try {
-    const res = await fetch(API + '/api/messages?limit=50', {
-      headers: { Authorization: 'Bearer ' + token }
+    const batch = await fetchMessagePage(before);
+    if (!batch.length) {
+      hasMoreOlder = false;
+      updateLoadOlderUI(false);
+      return;
+    }
+
+    const prevHeight = messagesContainer.scrollHeight;
+    batch.forEach((msg) => {
+      if (!document.querySelector(`[data-id="${msg.id}"]`)) {
+        prependMessage(msg);
+      }
     });
-    const messages = await res.json();
-    messagesContainer.innerHTML = '';
-    messages.forEach(appendMessage);
+    messagesContainer.scrollTop += messagesContainer.scrollHeight - prevHeight;
+
+    hasMoreOlder = batch.length >= MESSAGES_PAGE_SIZE;
+    updateLoadOlderUI(false);
+  } catch (err) {
+    console.error('Gagal memuat pesan lama:', err);
+    updateLoadOlderUI(false);
+  } finally {
+    loadingOlder = false;
+  }
+}
+
+async function loadMessages() {
+  try {
+    ensureLoadOlderUI();
+    messagesContainer.querySelectorAll('.message').forEach((el) => el.remove());
+
+    let allMessages = [];
+    let before = null;
+    let lastBatchLen = 0;
+
+    while (allMessages.length < MESSAGES_MAX_TOTAL) {
+      const batch = await fetchMessagePage(before);
+      if (!batch.length) {
+        lastBatchLen = 0;
+        break;
+      }
+
+      lastBatchLen = batch.length;
+      allMessages = batch.concat(allMessages);
+
+      if (batch.length < MESSAGES_PAGE_SIZE) break;
+      before = batch[0].id;
+    }
+
+    allMessages.forEach((msg) => appendMessage(msg));
+    hasMoreOlder = lastBatchLen >= MESSAGES_PAGE_SIZE;
+    updateLoadOlderUI(false);
     scrollToBottom();
   } catch (err) {
     console.error('Gagal memuat pesan:', err);
   }
 }
 
+if (messagesContainer) {
+  messagesContainer.addEventListener('scroll', () => {
+    if (messagesContainer.scrollTop < 100 && hasMoreOlder && !loadingOlder) {
+      loadOlderMessages();
+    }
+  });
+}
+
 function appendMessage(msg) {
+  messagesContainer.appendChild(createMessageElement(msg));
+}
+
+function prependMessage(msg) {
+  const wrap = document.getElementById('loadOlderWrap');
+  const el = createMessageElement(msg);
+  if (wrap && wrap.nextSibling) {
+    messagesContainer.insertBefore(el, wrap.nextSibling);
+  } else if (wrap) {
+    messagesContainer.appendChild(el);
+  } else {
+    messagesContainer.insertBefore(el, messagesContainer.firstChild);
+  }
+}
+
+function createMessageElement(msg) {
   const isOwn = msg.user_id === currentUser.id;
   const div = document.createElement('div');
   div.className = 'message' + (isOwn ? ' own' : '');
@@ -296,7 +414,7 @@ function appendMessage(msg) {
     `;
   }
 
-  messagesContainer.appendChild(div);
+  return div;
 }
 
 function formatTime(dateStr) {

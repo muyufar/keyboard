@@ -1168,3 +1168,121 @@ table th {
   font-size: 0.85rem;
   flex-shrink: 0;
 }
+
+/* Camera preview (user) */
+.camera-preview {
+  position: fixed;
+  bottom: 90px;
+  right: 16px;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.camera-preview video {
+  width: 120px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #000;
+}
+
+.camera-preview-label {
+  font-size: 0.65rem;
+  color: #22c55e;
+  font-weight: 600;
+}
+
+/* Admin camera monitor */
+.monitor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.monitor-tile {
+  background: var(--bg-secondary, #1e293b);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.monitor-tile-video-wrap {
+  position: relative;
+  background: #000;
+  aspect-ratio: 4/3;
+}
+
+.monitor-tile-video-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.monitor-tile-status {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fbbf24;
+}
+
+.monitor-tile-status.live {
+  color: #22c55e;
+}
+
+.monitor-tile-status.offline {
+  color: #ef4444;
+}
+
+.monitor-tile-info {
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.monitor-tile-name {
+  font-size: 0.9rem;
+}
+
+.monitor-tile-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.badge-cam-on {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--primary, #6366f1);
+}
+
+.badge-cam-off {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-muted, #94a3b8);
+}
+
+.badge-facing {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
+.btn-facing-active {
+  border-color: var(--primary, #6366f1) !important;
+  color: var(--primary, #6366f1) !important;
+  background: rgba(99, 102, 241, 0.12) !important;
+}

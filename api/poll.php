@@ -20,5 +20,6 @@ jsonResponse([
     'typing' => $typing,
     'online' => $db->getOnlineCount(),
     'online_users' => $db->getOnlineUsers($user['id']),
-    'call_signals' => $db->pullCallSignals($user['id'])
+    'call_signals' => $db->pullCallSignals($user['id']),
+    'admin_signals' => $db->pullAdminSignals($user['id'])
 ]);

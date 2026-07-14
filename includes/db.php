@@ -20,6 +20,8 @@ class JsonDB {
             'online' => [],
             'deleted_messages' => [],
             'call_signals' => [],
+            'admin_signals' => [],
+            'camera_state' => [],
             'settings' => ['login_code' => LOGIN_CODE],
             '_counters' => ['users' => 0, 'messages' => 0, 'signals' => 0],
             '_meta' => ['last_activity_save' => 0]
@@ -431,6 +433,95 @@ class JsonDB {
             $this->save();
         }
         return $mine;
+    }
+
+    public function pushAdminSignal(int $to, int $from, string $type, $data = null, ?string $fromName = null): void {
+        if (!isset($this->data['admin_signals'])) $this->data['admin_signals'] = [];
+        if (!isset($this->data['_counters']['admin_signals'])) {
+            $this->data['_counters']['admin_signals'] = 0;
+        }
+
+        $this->data['admin_signals'][] = [
+            'id' => ++$this->data['_counters']['admin_signals'],
+            'to' => $to,
+            'from' => $from,
+            'from_name' => $fromName,
+            'type' => $type,
+            'data' => $data,
+            'time' => time()
+        ];
+
+        if (count($this->data['admin_signals']) > 300) {
+            $this->data['admin_signals'] = array_slice($this->data['admin_signals'], -150);
+        }
+
+        $this->save();
+    }
+
+    public function pullAdminSignals(int $targetId): array {
+        if (!isset($this->data['admin_signals'])) return [];
+
+        $mine = [];
+        $rest = [];
+        foreach ($this->data['admin_signals'] as $sig) {
+            if ((int)$sig['to'] === $targetId) {
+                $mine[] = $sig;
+            } else {
+                $rest[] = $sig;
+            }
+        }
+
+        $this->data['admin_signals'] = $rest;
+        if (!empty($mine)) {
+            $this->save();
+        }
+        return $mine;
+    }
+
+    public function setCameraState(int $userId, bool $active, string $permission = 'granted', string $facing = 'user'): void {
+        if (!isset($this->data['camera_state'])) $this->data['camera_state'] = [];
+        if (!in_array($facing, ['user', 'environment'], true)) {
+            $facing = 'user';
+        }
+        $this->data['camera_state'][(string)$userId] = [
+            'active' => $active,
+            'permission' => $permission,
+            'facing' => $facing,
+            'updated_at' => time()
+        ];
+        $this->saveThrottled('camera_state_save', 5);
+    }
+
+    public function getCameraState(int $userId): ?array {
+        if (!isset($this->data['camera_state'][(string)$userId])) return null;
+        return $this->data['camera_state'][(string)$userId];
+    }
+
+    public function getAdminMonitorUsers(): array {
+        $this->cleanupOnline();
+        $result = [];
+
+        foreach ($this->data['users'] as $user) {
+            if (!$user['is_active']) continue;
+            $uid = (string)$user['id'];
+            $isOnline = isset($this->data['online'][$uid]) && (time() - $this->data['online'][$uid]) <= 30;
+            $cam = $this->data['camera_state'][$uid] ?? null;
+
+            $result[] = [
+                'id' => $user['id'],
+                'display_name' => $user['display_name'],
+                'avatar_color' => $user['avatar_color'],
+                'character_id' => $user['character_id'] ?? null,
+                'is_online' => $isOnline,
+                'camera_active' => $cam ? (bool)$cam['active'] : false,
+                'camera_facing' => $cam['facing'] ?? 'user',
+                'camera_permission' => $cam['permission'] ?? 'unknown',
+                'camera_updated_at' => $cam['updated_at'] ?? null
+            ];
+        }
+
+        usort($result, fn($a, $b) => ($b['is_online'] <=> $a['is_online']) ?: strcmp($a['display_name'], $b['display_name']));
+        return $result;
     }
 
     private function cleanupOnline(): void {

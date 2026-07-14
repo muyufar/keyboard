@@ -85,6 +85,26 @@
     </div>
 
     <div class="card">
+      <h2>Monitor Kamera User</h2>
+      <p id="monitorStatus" style="margin-bottom:12px;color:var(--text-muted);font-size:0.9rem">Memuat status...</p>
+      <div id="monitorGrid" class="monitor-grid"></div>
+      <div id="monitorTableWrap" style="margin-top:20px">
+        <table>
+          <thead>
+            <tr>
+              <th>Nama</th>
+              <th>Status</th>
+              <th>Kamera</th>
+              <th>Lens</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="monitorUserList"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Daftar User</h2>
       <div id="userTableWrap">
         <table>
@@ -139,6 +159,7 @@
 
   <script>const BASE = '<?= BASE_PATH ?>';</script>
   <script src="<?= BASE_PATH ?>/public/js/characters.js"></script>
+  <script src="<?= BASE_PATH ?>/public/js/admin-monitor.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/backoffice-php.js"></script>
 </body>
 </html>

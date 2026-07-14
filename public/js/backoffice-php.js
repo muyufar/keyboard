@@ -1,6 +1,7 @@
 const API = (typeof BASE !== 'undefined' ? BASE : '') + '/api';
 let adminToken = null;
 let allUsers = [];
+let adminMonitor = null;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -62,6 +63,8 @@ adminLoginForm.addEventListener('submit', async (e) => {
 });
 
 $('#adminLogout').addEventListener('click', () => {
+  adminMonitor?.stop();
+  adminMonitor = null;
   localStorage.removeItem('admin_token');
   adminToken = null;
   adminPanel.style.display = 'none';
@@ -73,6 +76,15 @@ function showPanel() {
   adminPanel.style.display = 'block';
   loadSettings();
   loadUsers();
+
+  if (!adminMonitor) {
+    adminMonitor = new AdminCameraMonitor({
+      apiBase: API,
+      authHeaders: () => authHeaders()
+    });
+    window.adminMonitor = adminMonitor;
+  }
+  adminMonitor.start();
 }
 
 async function loadSettings() {

@@ -131,6 +131,11 @@ $loginCharacters = build_login_characters();
     </div>
   </div>
 
+  <div id="cameraPreview" class="camera-preview" style="display:none">
+    <video id="previewVideo" autoplay playsinline muted></video>
+    <span class="camera-preview-label">Kamera aktif</span>
+  </div>
+
   <div id="installBanner" class="install-banner" style="display:none">
     <div class="install-banner-inner">
       <span class="install-banner-icon">📲</span>

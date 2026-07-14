@@ -13,6 +13,11 @@ const registerError = $('#registerError');
 const userTableBody = $('#userTableBody');
 const emptyUsers = $('#emptyUsers');
 
+const CHAR_LABELS = {
+  librarian: 'Pustakawan', student: 'Pelajar', merchant: 'Pedagang',
+  writer: 'Penulis', reader: 'Pembaca', courier: 'Kurir'
+};
+
 function authHeaders() {
   return { Authorization: 'Bearer ' + adminToken };
 }
@@ -89,8 +94,8 @@ function renderUsers(users) {
 
     tr.innerHTML = `
       <td><div style="display:flex;align-items:center;gap:8px">
-        <div class="avatar avatar-sm" style="background:${user.avatar_color}">${user.display_name.charAt(0).toUpperCase()}</div>
-        <strong>${escapeHtml(user.username)}</strong>
+        <div class="avatar avatar-sm" style="background:${user.avatar_color}">${(CHAR_LABELS[user.character_id] || user.display_name).charAt(0).toUpperCase()}</div>
+        <strong>${escapeHtml(CHAR_LABELS[user.character_id] || user.character_id || '-')}</strong>
       </div></td>
       <td>${escapeHtml(user.display_name)}</td>
       <td><span class="badge ${user.is_active ? 'badge-active' : 'badge-inactive'}">${user.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
@@ -113,15 +118,14 @@ registerForm.addEventListener('submit', async (e) => {
       method: 'POST',
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        username: $('#newUsername').value.trim(),
-        password: $('#newPassword').value,
+        character_id: $('#newCharacter').value,
         display_name: $('#newDisplayName').value.trim()
       })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
 
-    registerSuccess.textContent = `User "${data.display_name}" (@${data.username}) berhasil didaftarkan!`;
+    registerSuccess.textContent = `Karakter "${CHAR_LABELS[data.character_id] || data.character_id}" (${data.display_name}) berhasil didaftarkan!`;
     registerSuccess.style.display = 'block';
     registerForm.reset();
     loadUsers();

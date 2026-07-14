@@ -1,7 +1,7 @@
 {
-  "name": "light-chat",
+  "name": "pemesanan-buku",
   "version": "1.0.0",
-  "description": "Aplikasi chat ringan dengan dukungan media real-time",
+  "description": "Aplikasi pemesanan buku dengan komunikasi real-time",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

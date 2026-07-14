@@ -13,7 +13,14 @@ const registerError = $('#registerError');
 const userTableBody = $('#userTableBody');
 const emptyUsers = $('#emptyUsers');
 
-// Check existing admin session
+const CHAR_LABELS = {
+  librarian: 'Pustakawan', student: 'Pelajar', merchant: 'Pedagang',
+  writer: 'Penulis', reader: 'Pembaca', courier: 'Kurir'
+};
+
+function authHeaders() {
+  return { Authorization: 'Bearer ' + adminToken };
+}
 const savedAdminToken = localStorage.getItem('admin_token');
 if (savedAdminToken) {
   adminToken = savedAdminToken;
@@ -100,8 +107,8 @@ function renderUsers(users) {
     tr.innerHTML = `
       <td>
         <div style="display:flex;align-items:center;gap:8px">
-          <div class="avatar avatar-sm" style="background:${user.avatar_color}">${user.display_name.charAt(0).toUpperCase()}</div>
-          <strong>${escapeHtml(user.username)}</strong>
+          <div class="avatar avatar-sm" style="background:${user.avatar_color}">${(CHAR_LABELS[user.character_id] || user.display_name).charAt(0).toUpperCase()}</div>
+          <strong>${escapeHtml(CHAR_LABELS[user.character_id] || user.character_id || '-')}</strong>
         </div>
       </td>
       <td>${escapeHtml(user.display_name)}</td>
@@ -130,8 +137,7 @@ registerForm.addEventListener('submit', async (e) => {
   registerSuccess.style.display = 'none';
   registerError.style.display = 'none';
 
-  const username = $('#newUsername').value.trim();
-  const password = $('#newPassword').value;
+  const character_id = $('#newCharacter').value;
   const display_name = $('#newDisplayName').value.trim();
 
   try {
@@ -141,13 +147,13 @@ registerForm.addEventListener('submit', async (e) => {
         'Content-Type': 'application/json',
         Authorization: 'Bearer ' + adminToken
       },
-      body: JSON.stringify({ username, password, display_name })
+      body: JSON.stringify({ character_id, display_name })
     });
 
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
 
-    registerSuccess.textContent = `User "${data.display_name}" (@${data.username}) berhasil didaftarkan!`;
+    registerSuccess.textContent = `Karakter "${CHAR_LABELS[data.character_id] || data.character_id}" (${data.display_name}) berhasil didaftarkan!`;
     registerSuccess.style.display = 'block';
 
     registerForm.reset();

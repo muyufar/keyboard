@@ -4,27 +4,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Light Chat</title>
+  <title>Pemesanan Buku</title>
   <link rel="stylesheet" href="<?= BASE_PATH ?>/public/css/style.css">
+  <link rel="stylesheet" href="<?= BASE_PATH ?>/public/css/characters.css">
 </head>
 <body>
 
-  <div id="loginScreen" class="login-page">
-    <div class="login-card">
-      <h1>Light Chat</h1>
-      <p>Masuk untuk mulai mengobrol secara real-time</p>
-      <div id="loginError" class="error-msg"></div>
-      <form id="loginForm">
-        <div class="form-group">
-          <label for="username">Username</label>
-          <input type="text" id="username" placeholder="Masukkan username" required autocomplete="username">
-        </div>
-        <div class="form-group">
-          <label for="password">Password</label>
-          <input type="password" id="password" placeholder="Masukkan password" required autocomplete="current-password">
-        </div>
-        <button type="submit" class="btn btn-primary">Masuk</button>
-      </form>
+  <div id="loginScreen" class="character-login">
+    <div class="character-login-header">
+      <h1>PEMESANAN BUKU</h1>
+      <p>Pilih karakter Anda untuk masuk</p>
+    </div>
+    <div id="loginError" class="error-msg" style="max-width:400px;width:100%;margin-bottom:16px"></div>
+    <div class="character-grid" id="characterGrid"></div>
+    <div class="character-login-footer">
+      <div class="character-selected-name" id="selectedCharName"></div>
+      <button class="btn btn-primary" id="enterBtn" disabled>Masuk</button>
+      <p class="character-hint">Karakter dikunci? Daftarkan di Backoffice</p>
     </div>
   </div>
 
@@ -32,7 +28,7 @@
     <header class="chat-header">
       <h2>
         <span class="online-dot"></span>
-        Light Chat
+        Pemesanan Buku
         <span class="online-count" id="onlineCount">0 online</span>
       </h2>
       <div class="user-info">
@@ -70,7 +66,7 @@
       <div class="input-row">
         <button class="attach-btn" id="attachBtn" title="Lampirkan file">📎</button>
         <input type="file" id="fileInput" accept="image/*,video/*,audio/*" hidden>
-        <textarea class="message-input" id="messageInput" placeholder="Ketik pesan..." rows="1"></textarea>
+        <textarea class="message-input" id="messageInput" placeholder="Ketik pesanan atau pesan..." rows="1"></textarea>
         <button class="send-btn" id="sendBtn" title="Kirim">➤</button>
       </div>
     </div>
@@ -113,6 +109,7 @@
   </div>
 
   <script>const BASE = '<?= BASE_PATH ?>';</script>
+  <script src="<?= BASE_PATH ?>/public/js/characters.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/notifications.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/videocall.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/chat-php.js"></script>

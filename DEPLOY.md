@@ -1,4 +1,4 @@
-# Light Chat - Panduan Deploy ke Shared Hosting (cPanel)
+# Pemesanan Buku - Panduan Deploy ke Shared Hosting (cPanel)
 
 ## Masalah
 Hosting shared (cPanel) **tidak punya Node.js/npm**, sehingga `npm install` gagal.

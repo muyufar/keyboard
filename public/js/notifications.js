@@ -84,7 +84,7 @@ const ChatNotify = {
     try {
       const n = new Notification(title, {
         body: (body || '').substring(0, 200),
-        tag: options.tag || 'light-chat',
+        tag: options.tag || 'pemesanan-buku',
         requireInteraction: !!options.requireInteraction
       });
       n.onclick = () => { window.focus(); n.close(); };

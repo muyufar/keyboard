@@ -35,6 +35,13 @@ class JsonDB {
         return null;
     }
 
+    public function findUserByCharacterId(string $characterId): ?array {
+        foreach ($this->data['users'] as $user) {
+            if (($user['character_id'] ?? '') === $characterId) return $user;
+        }
+        return null;
+    }
+
     public function findUserById(int $id): ?array {
         foreach ($this->data['users'] as $user) {
             if ($user['id'] === $id) return $user;
@@ -55,6 +62,7 @@ class JsonDB {
             'password' => $data['password'],
             'display_name' => $data['display_name'],
             'avatar_color' => $data['avatar_color'],
+            'character_id' => $data['character_id'] ?? null,
             'is_active' => 1,
             'created_at' => date('c')
         ];

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/characters.php';
 requireAdmin();
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -14,33 +15,34 @@ if ($method === 'GET') {
 
 if ($method === 'POST') {
     $input = getJsonInput();
-    $username = trim($input['username'] ?? '');
-    $password = $input['password'] ?? '';
+    $characterId = trim($input['character_id'] ?? '');
     $displayName = trim($input['display_name'] ?? '');
 
-    if (!$username || !$password || !$displayName) {
-        jsonResponse(['error' => 'Semua field wajib diisi'], 400);
+    if (!$characterId || !$displayName) {
+        jsonResponse(['error' => 'Karakter dan nama tampilan wajib diisi'], 400);
     }
-    if (strlen($password) < 4) {
-        jsonResponse(['error' => 'Password minimal 4 karakter'], 400);
+    if (!isValidCharacter($characterId)) {
+        jsonResponse(['error' => 'Karakter tidak valid'], 400);
     }
-    if ($db->findUserByUsername($username)) {
-        jsonResponse(['error' => 'Username sudah digunakan'], 409);
+    if ($db->findUserByCharacterId($characterId)) {
+        jsonResponse(['error' => 'Karakter sudah digunakan'], 409);
     }
 
-    $color = $colors[array_rand($colors)];
+    $meta = CHARACTERS[$characterId];
     $user = $db->createUser([
-        'username' => $username,
-        'password' => password_hash($password, PASSWORD_DEFAULT),
+        'username' => $characterId,
+        'password' => password_hash(bin2hex(random_bytes(8)), PASSWORD_DEFAULT),
         'display_name' => $displayName,
-        'avatar_color' => $color
+        'avatar_color' => $meta['color'],
+        'character_id' => $characterId
     ]);
 
     jsonResponse([
         'id' => $user['id'],
         'username' => $user['username'],
         'display_name' => $user['display_name'],
-        'avatar_color' => $user['avatar_color']
+        'avatar_color' => $user['avatar_color'],
+        'character_id' => $user['character_id']
     ], 201);
 }
 

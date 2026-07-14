@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Backoffice - Light Chat</title>
+  <title>Backoffice - Pemesanan Buku</title>
   <link rel="stylesheet" href="<?= BASE_PATH ?>/public/css/style.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
   <div id="adminLogin" class="login-page">
     <div class="login-card">
       <h1>Backoffice</h1>
-      <p>Panel administrasi Light Chat</p>
+      <p>Panel administrasi Pemesanan Buku</p>
       <div id="adminError" class="error-msg"></div>
       <form id="adminLoginForm">
         <div class="form-group">
@@ -26,7 +26,7 @@
         <button type="submit" class="btn btn-primary">Masuk</button>
       </form>
       <p style="margin-top:16px;text-align:center;font-size:0.8rem;color:var(--text-muted)">
-        <a href="<?= BASE_PATH ?>/" style="color:var(--primary);text-decoration:none">← Kembali ke Chat</a>
+        <a href="<?= BASE_PATH ?>/" style="color:var(--primary);text-decoration:none">← Kembali ke Aplikasi</a>
       </p>
     </div>
   </div>
@@ -35,7 +35,7 @@
     <div class="backoffice-header">
       <h1>Backoffice - Kelola User</h1>
       <div style="display:flex;gap:10px;align-items:center">
-        <a href="<?= BASE_PATH ?>/" class="btn btn-outline btn-sm">Buka Chat</a>
+        <a href="<?= BASE_PATH ?>/" class="btn btn-outline btn-sm">Buka Aplikasi</a>
         <button class="logout-btn" id="adminLogout">Keluar</button>
       </div>
     </div>
@@ -47,12 +47,16 @@
       <form id="registerForm">
         <div class="form-row">
           <div class="form-group">
-            <label for="newUsername">Username</label>
-            <input type="text" id="newUsername" placeholder="username" required>
-          </div>
-          <div class="form-group">
-            <label for="newPassword">Password</label>
-            <input type="text" id="newPassword" placeholder="password" required>
+            <label for="newCharacter">Karakter</label>
+            <select id="newCharacter" required>
+              <option value="">Pilih karakter...</option>
+              <option value="librarian">📚 Pustakawan</option>
+              <option value="student">🎓 Pelajar</option>
+              <option value="merchant">🏪 Pedagang</option>
+              <option value="writer">✍️ Penulis</option>
+              <option value="reader">📖 Pembaca</option>
+              <option value="courier">📦 Kurir</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="newDisplayName">Nama Tampilan</label>
@@ -69,7 +73,7 @@
         <table>
           <thead>
             <tr>
-              <th>Username</th>
+              <th>Karakter</th>
               <th>Nama Tampilan</th>
               <th>Status</th>
               <th>Terdaftar</th>

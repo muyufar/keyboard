@@ -12,8 +12,11 @@ const $ = (sel) => document.querySelector(sel);
 
 const loginScreen = $('#loginScreen');
 const chatScreen = $('#chatScreen');
-const loginForm = $('#loginForm');
 const loginError = $('#loginError');
+const characterGrid = $('#characterGrid');
+const enterBtn = $('#enterBtn');
+const selectedCharName = $('#selectedCharName');
+let selectedCharacter = null;
 const messagesContainer = $('#messagesContainer');
 const messageInput = $('#messageInput');
 const sendBtn = $('#sendBtn');
@@ -56,20 +59,37 @@ const savedUser = localStorage.getItem('chat_user');
 if (savedToken && savedUser) {
   currentUser = JSON.parse(savedUser);
   showChat();
+} else {
+  loadCharacters();
 }
 
-loginForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
+async function loadCharacters() {
+  try {
+    const res = await fetch(API + '/characters.php');
+    const characters = await res.json();
+    renderCharacterGrid(characters, characterGrid, (ch) => {
+      selectedCharacter = ch;
+      selectedCharName.textContent = ch.display_name
+        ? `${PIXEL_CHARS[ch.id]?.name} — ${ch.display_name}`
+        : '';
+      enterBtn.disabled = false;
+    });
+  } catch (err) {
+    loginError.textContent = 'Gagal memuat karakter';
+    loginError.style.display = 'block';
+  }
+}
+
+enterBtn.addEventListener('click', async () => {
+  if (!selectedCharacter) return;
   loginError.style.display = 'none';
+  enterBtn.disabled = true;
 
   try {
     const res = await fetch(API + '/login.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: $('#username').value.trim(),
-        password: $('#password').value
-      })
+      body: JSON.stringify({ character_id: selectedCharacter.id })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
@@ -81,6 +101,7 @@ loginForm.addEventListener('submit', async (e) => {
   } catch (err) {
     loginError.textContent = err.message;
     loginError.style.display = 'block';
+    enterBtn.disabled = false;
   }
 });
 
@@ -92,9 +113,13 @@ $('#logoutBtn').addEventListener('click', () => {
   localStorage.removeItem('chat_user');
   currentUser = null;
   lastMessageId = 0;
+  selectedCharacter = null;
   chatScreen.style.display = 'none';
   loginScreen.style.display = 'flex';
   messagesContainer.innerHTML = '';
+  enterBtn.disabled = true;
+  selectedCharName.textContent = '';
+  loadCharacters();
 });
 
 function showChat() {

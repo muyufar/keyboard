@@ -1,14 +1,15 @@
-# Light Chat
+# Pemesanan Buku
 
-Aplikasi chat ringan dengan dukungan media real-time.
+Aplikasi pemesanan buku dengan komunikasi real-time antara pelanggan dan admin.
 
 ## Fitur
 
-- **Chat real-time** menggunakan Socket.io (WebSocket)
-- **Kirim gambar, video, dan audio** — langsung diputar di dalam chat
+- **Komunikasi real-time** menggunakan Socket.io (WebSocket) / polling PHP
+- **Kirim gambar, video, dan audio** — bukti transfer, sampel buku, dll.
 - **Registrasi user** melalui halaman Backoffice (admin panel)
-- **Indikator typing** — tahu kapan orang lain sedang mengetik
-- **Jumlah user online** — tampil di header chat
+- **Reply pesan** — balas pesan tertentu
+- **Notifikasi browser** — dengan persetujuan pengguna
+- **Video call** — komunikasi langsung 1-on-1
 - **Database JSON** — ringan, tanpa perlu setup database server
 
 ## Instalasi
@@ -31,43 +32,39 @@ Login admin default:
 - **Password:** `admin123`
 
 Di backoffice Anda bisa:
-- Mendaftarkan user baru (username, password, nama tampilan)
+- Mendaftarkan pelanggan baru (username, password, nama tampilan)
 - Mengaktifkan / menonaktifkan user
 - Menghapus user
 
-### 2. Chat
+### 2. Aplikasi Pemesanan
 
 Buka `http://localhost:3000`
 
-User yang sudah didaftarkan di backoffice bisa login dan langsung chat.
+User yang sudah didaftarkan di backoffice bisa login dan berkomunikasi.
 
-Fitur chat:
-- Ketik pesan teks dan tekan Enter atau tombol kirim
+Fitur:
+- Ketik pesan pemesanan dan tekan Enter atau tombol kirim
 - Klik ikon 📎 untuk melampirkan gambar, video, atau audio
-- Gambar bisa diklik untuk tampilan fullscreen
-- Video dan audio bisa diputar langsung di chat
+- Balas pesan dengan tombol ↩
+- Aktifkan notifikasi lewat banner atau tombol 🔔
+- Video call lewat tombol 📹
 
 ## Struktur Proyek
 
 ```
 keyboard/
-├── server.js          # Backend (Express + Socket.io + SQLite)
+├── index.php          # Halaman utama (PHP / hosting)
+├── server.js          # Backend Node.js (development)
 ├── package.json
 ├── data/              # Database JSON (auto-generated)
 ├── uploads/           # File media yang diunggah
 └── public/
-    ├── index.html     # Halaman chat
-    ├── css/style.css  # Styles
+    ├── css/style.css
     ├── js/
-    │   ├── chat.js    # Logika chat
-    │   └── backoffice.js
     └── backoffice/
-        └── index.html # Panel admin
 ```
 
 ## Konfigurasi (opsional)
-
-Set environment variables sebelum menjalankan:
 
 | Variable | Default | Keterangan |
 |----------|---------|------------|
@@ -78,9 +75,8 @@ Set environment variables sebelum menjalankan:
 
 ## Teknologi
 
-- **Node.js** + Express
+- **PHP** — untuk shared hosting (cPanel)
+- **Node.js** + Express — development lokal
 - **Socket.io** — real-time messaging
-- **JSON file** — penyimpanan data ringan, tanpa native dependency
-- **Multer** — upload file
-- **bcryptjs** — hash password
-- **JWT** — autentikasi
+- **WebRTC** — video call
+- **JSON file** — penyimpanan data ringan

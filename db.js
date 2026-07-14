@@ -32,6 +32,10 @@ class JsonDB {
     return this.data.users.find(u => u.username === username) || null;
   }
 
+  findUserByCharacterId(characterId) {
+    return this.data.users.find(u => u.character_id === characterId) || null;
+  }
+
   findUserById(id) {
     return this.data.users.find(u => u.id === id) || null;
   }
@@ -40,13 +44,14 @@ class JsonDB {
     return [...this.data.users].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }
 
-  createUser({ username, password, display_name, avatar_color }) {
+  createUser({ username, password, display_name, avatar_color, character_id }) {
     const user = {
       id: ++this.data._counters.users,
       username,
       password,
       display_name,
       avatar_color,
+      character_id: character_id || null,
       is_active: 1,
       created_at: new Date().toISOString()
     };

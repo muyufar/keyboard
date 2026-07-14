@@ -84,17 +84,41 @@ function getMediaType(mimetype) {
   return 'file';
 }
 
-const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#06b6d4'];
+const CHARACTERS = {
+  librarian: { name: 'Pustakawan', title: 'Ahli buku', color: '#4a90d9' },
+  student:   { name: 'Pelajar', title: 'Pencari ilmu', color: '#22c55e' },
+  merchant:  { name: 'Pedagang', title: 'Jual beli buku', color: '#f97316' },
+  writer:    { name: 'Penulis', title: 'Pena giat', color: '#a855f7' },
+  reader:    { name: 'Pembaca', title: 'Kutu buku', color: '#ec4899' },
+  courier:   { name: 'Kurir', title: 'Antar pesanan', color: '#ef4444' }
+};
 
 // ============ API Routes ============
 
-app.post('/api/login', (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Username dan password wajib diisi' });
+app.get('/api/characters', (req, res) => {
+  const chars = Object.entries(CHARACTERS).map(([id, meta]) => {
+    const user = db.findUserByCharacterId(id);
+    return {
+      id,
+      name: meta.name,
+      title: meta.title,
+      color: meta.color,
+      available: !!(user && user.is_active),
+      display_name: user ? user.display_name : null
+    };
+  });
+  res.json(chars);
+});
 
-  const user = db.findUserByUsername(username);
-  if (!user || !user.is_active || !bcrypt.compareSync(password, user.password)) {
-    return res.status(401).json({ error: 'Username atau password salah' });
+app.post('/api/login', (req, res) => {
+  const { character_id } = req.body;
+  if (!character_id || !CHARACTERS[character_id]) {
+    return res.status(400).json({ error: 'Karakter tidak valid' });
+  }
+
+  const user = db.findUserByCharacterId(character_id);
+  if (!user || !user.is_active) {
+    return res.status(401).json({ error: 'Karakter belum tersedia. Hubungi admin.' });
   }
 
   res.json({
@@ -103,7 +127,8 @@ app.post('/api/login', (req, res) => {
       id: user.id,
       username: user.username,
       display_name: user.display_name,
-      avatar_color: user.avatar_color
+      avatar_color: user.avatar_color,
+      character_id: user.character_id
     }
   });
 });
@@ -123,31 +148,32 @@ app.get('/api/admin/users', adminMiddleware, (req, res) => {
 });
 
 app.post('/api/admin/users', adminMiddleware, (req, res) => {
-  const { username, password, display_name } = req.body;
-  if (!username || !password || !display_name) {
-    return res.status(400).json({ error: 'Semua field wajib diisi' });
+  const { character_id, display_name } = req.body;
+  if (!character_id || !display_name) {
+    return res.status(400).json({ error: 'Karakter dan nama tampilan wajib diisi' });
   }
-  if (password.length < 4) {
-    return res.status(400).json({ error: 'Password minimal 4 karakter' });
+  if (!CHARACTERS[character_id]) {
+    return res.status(400).json({ error: 'Karakter tidak valid' });
+  }
+  if (db.findUserByCharacterId(character_id)) {
+    return res.status(409).json({ error: 'Karakter sudah digunakan' });
   }
 
-  if (db.findUserByUsername(username)) {
-    return res.status(409).json({ error: 'Username sudah digunakan' });
-  }
-
-  const color = colors[Math.floor(Math.random() * colors.length)];
+  const meta = CHARACTERS[character_id];
   const user = db.createUser({
-    username,
-    password: bcrypt.hashSync(password, 10),
+    username: character_id,
+    password: bcrypt.hashSync(require('crypto').randomBytes(8).toString('hex'), 10),
     display_name,
-    avatar_color: color
+    avatar_color: meta.color,
+    character_id
   });
 
   res.status(201).json({
     id: user.id,
     username: user.username,
     display_name: user.display_name,
-    avatar_color: user.avatar_color
+    avatar_color: user.avatar_color,
+    character_id: user.character_id
   });
 });
 
@@ -323,7 +349,7 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`\n  Light Chat berjalan di http://localhost:${PORT}`);
+  console.log(`\n  Pemesanan Buku berjalan di http://localhost:${PORT}`);
   console.log(`  Backoffice: http://localhost:${PORT}/backoffice/`);
   console.log(`  Admin login: ${ADMIN_USER} / ${ADMIN_PASS}\n`);
 });

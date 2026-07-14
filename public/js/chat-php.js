@@ -147,6 +147,8 @@ $('#logoutBtn').addEventListener('click', () => {
   loadCharacters();
 });
 
+let emojiPickerInited = false;
+
 function showChat() {
   loginScreen.style.display = 'none';
   chatScreen.style.display = 'flex';
@@ -155,6 +157,15 @@ function showChat() {
   avatar.textContent = currentUser.display_name.charAt(0).toUpperCase();
   avatar.style.background = currentUser.avatar_color;
   $('#userDisplayName').textContent = currentUser.display_name;
+
+  if (!emojiPickerInited) {
+    initEmojiPicker({
+      button: $('#emojiBtn'),
+      panel: $('#emojiPicker'),
+      input: messageInput
+    });
+    emojiPickerInited = true;
+  }
 
   videoCall = new VideoCallManager({
     currentUser,
@@ -275,7 +286,9 @@ function appendMessage(msg) {
     }
   }
 
-  const textHtml = msg.content ? `<div class="message-text">${escapeHtml(msg.content)}</div>` : '';
+  const textHtml = msg.content
+    ? `<div class="message-text${isMostlyEmoji(msg.content) ? ' emoji-large' : ''}">${escapeHtml(msg.content)}</div>`
+    : '';
   const replyHtml = buildReplyQuoteHtml(msg.reply_to, isOwn);
   const deleteBtn = isOwn ? `<button class="delete-msg-btn" onclick="deleteMessage(${msg.id})" title="Hapus pesan">✕</button>` : '';
   const replyBtn = `<button class="reply-msg-btn" onclick="startReply(${msg.id})" title="Balas pesan">↩</button>`;

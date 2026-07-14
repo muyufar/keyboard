@@ -15,6 +15,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="<?= BASE_PATH ?>/public/icons/icon-192.png">
   <link rel="stylesheet" href="<?= BASE_PATH ?>/public/css/style.css">
   <link rel="stylesheet" href="<?= BASE_PATH ?>/public/css/characters.css">
+  <link rel="stylesheet" href="<?= BASE_PATH ?>/public/css/emojis.css">
 </head>
 <body>
 
@@ -77,8 +78,12 @@
         </div>
         <button class="remove-attachment" id="removeAttachment" title="Hapus">&times;</button>
       </div>
+      <div id="emojiPicker" class="emoji-picker" style="display:none"></div>
       <div class="input-row">
-        <button class="attach-btn" id="attachBtn" title="Lampirkan file">📎</button>
+        <div class="input-tools">
+          <button class="attach-btn" id="attachBtn" title="Lampirkan file">📎</button>
+          <button class="attach-btn" id="emojiBtn" title="Emoji & Karakter Khusus">😊</button>
+        </div>
         <input type="file" id="fileInput" accept="image/*,video/*,audio/*" hidden>
         <textarea class="message-input" id="messageInput" placeholder="Ketik pesanan atau pesan..." rows="1"></textarea>
         <button class="send-btn" id="sendBtn" title="Kirim">➤</button>
@@ -136,6 +141,7 @@
   <script src="<?= BASE_PATH ?>/public/js/characters.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/notifications.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/videocall.js"></script>
+  <script src="<?= BASE_PATH ?>/public/js/emojis.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/chat-php.js"></script>
 </body>
 </html>

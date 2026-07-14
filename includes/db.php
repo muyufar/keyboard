@@ -32,7 +32,6 @@ class JsonDB {
         }
         if (empty($this->data['settings']['login_code'])) {
             $this->data['settings']['login_code'] = LOGIN_CODE;
-            $this->save();
         }
     }
 
@@ -51,6 +50,7 @@ class JsonDB {
     private function load(): void {
         if (!is_dir(DATA_PATH)) mkdir(DATA_PATH, 0755, true);
         if (!file_exists($this->filePath)) {
+            @mkdir(DATA_PATH, 0755, true);
             $this->save();
             $this->ensureSettings();
             return;
@@ -85,40 +85,67 @@ class JsonDB {
         $merged = array_merge($this->defaultData(), $base);
 
         $messages = [];
-        foreach ($merged['messages'] as $m) $messages[$m['id']] = $m;
-        foreach ($incoming['messages'] ?? [] as $m) $messages[$m['id']] = $m;
+        foreach ((array)($merged['messages'] ?? []) as $m) {
+            if (!is_array($m) || !isset($m['id'])) continue;
+            $messages[$m['id']] = $m;
+        }
+        foreach ((array)($incoming['messages'] ?? []) as $m) {
+            if (!is_array($m) || !isset($m['id'])) continue;
+            $messages[$m['id']] = $m;
+        }
         ksort($messages);
         $merged['messages'] = array_values($messages);
 
         $users = [];
-        foreach ($merged['users'] as $u) $users[$u['id']] = $u;
-        foreach ($incoming['users'] ?? [] as $u) $users[$u['id']] = $u;
+        foreach ((array)($merged['users'] ?? []) as $u) {
+            if (!is_array($u) || !isset($u['id'])) continue;
+            $users[$u['id']] = $u;
+        }
+        foreach ((array)($incoming['users'] ?? []) as $u) {
+            if (!is_array($u) || !isset($u['id'])) continue;
+            $users[$u['id']] = $u;
+        }
         $merged['users'] = array_values($users);
 
-        $merged['sessions'] = array_merge($merged['sessions'], $incoming['sessions'] ?? []);
+        $merged['sessions'] = array_merge(
+            (array)($merged['sessions'] ?? []),
+            (array)($incoming['sessions'] ?? [])
+        );
 
-        $online = $merged['online'];
-        foreach ($incoming['online'] ?? [] as $uid => $ts) {
+        $online = (array)($merged['online'] ?? []);
+        foreach ((array)($incoming['online'] ?? []) as $uid => $ts) {
             $online[$uid] = max((int)($online[$uid] ?? 0), (int)$ts);
         }
         $merged['online'] = $online;
 
-        $merged['typing'] = array_merge($merged['typing'], $incoming['typing'] ?? []);
+        $merged['typing'] = array_merge(
+            (array)($merged['typing'] ?? []),
+            (array)($incoming['typing'] ?? [])
+        );
         $merged['deleted_messages'] = array_values(array_unique(array_merge(
-            $merged['deleted_messages'],
-            $incoming['deleted_messages'] ?? []
+            (array)($merged['deleted_messages'] ?? []),
+            (array)($incoming['deleted_messages'] ?? [])
         )));
         if (count($merged['deleted_messages']) > 100) {
             $merged['deleted_messages'] = array_slice($merged['deleted_messages'], -100);
         }
 
-        $merged['call_signals'] = array_merge($merged['call_signals'], $incoming['call_signals'] ?? []);
+        $merged['call_signals'] = array_merge(
+            (array)($merged['call_signals'] ?? []),
+            (array)($incoming['call_signals'] ?? [])
+        );
         if (count($merged['call_signals']) > 200) {
             $merged['call_signals'] = array_slice($merged['call_signals'], -100);
         }
 
-        $merged['settings'] = array_merge($merged['settings'], $incoming['settings'] ?? []);
-        $merged['_meta'] = array_merge($merged['_meta'], $incoming['_meta'] ?? []);
+        $merged['settings'] = array_merge(
+            (array)($merged['settings'] ?? []),
+            (array)($incoming['settings'] ?? [])
+        );
+        $merged['_meta'] = array_merge(
+            (array)($merged['_meta'] ?? []),
+            (array)($incoming['_meta'] ?? [])
+        );
 
         foreach (['users', 'messages', 'signals'] as $key) {
             $merged['_counters'][$key] = max(
@@ -130,36 +157,47 @@ class JsonDB {
         return $merged;
     }
 
-    public function save(): void {
-        $fp = @fopen($this->filePath, 'c+');
-        if (!$fp) {
-            file_put_contents(
-                $this->filePath,
-                json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
-                LOCK_EX
-            );
-            return;
-        }
-
-        flock($fp, LOCK_EX);
-        rewind($fp);
-        $existing = stream_get_contents($fp);
-        if ($existing) {
-            $decoded = json_decode($existing, true);
-            if (is_array($decoded)) {
-                $this->data = $this->mergeData($decoded, $this->data);
+    public function save(): bool {
+        try {
+            if (!is_dir(DATA_PATH)) {
+                @mkdir(DATA_PATH, 0755, true);
             }
+
+            $fp = @fopen($this->filePath, 'c+');
+            if (!$fp) {
+                return (bool)@file_put_contents(
+                    $this->filePath,
+                    json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+                    LOCK_EX
+                );
+            }
+
+            flock($fp, LOCK_EX);
+            rewind($fp);
+            $existing = stream_get_contents($fp);
+            if ($existing) {
+                $decoded = json_decode($existing, true);
+                if (is_array($decoded)) {
+                    $this->data = $this->mergeData($decoded, $this->data);
+                }
+            }
+
+            $json = json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            if ($json === false) return false;
+
+            ftruncate($fp, 0);
+            rewind($fp);
+            fwrite($fp, $json);
+            fflush($fp);
+            flock($fp, LOCK_UN);
+            fclose($fp);
+
+            @copy($this->filePath, $this->filePath . '.bak');
+            return true;
+        } catch (Throwable $e) {
+            error_log('JsonDB save failed: ' . $e->getMessage());
+            return false;
         }
-
-        $json = json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        ftruncate($fp, 0);
-        rewind($fp);
-        fwrite($fp, $json);
-        fflush($fp);
-        flock($fp, LOCK_UN);
-        fclose($fp);
-
-        @copy($this->filePath, $this->filePath . '.bak');
     }
 
     private function saveThrottled(string $key, int $seconds): void {
@@ -178,7 +216,7 @@ class JsonDB {
     }
 
     public function findUserByCharacterId(string $characterId): ?array {
-        foreach ($this->data['users'] as $user) {
+        foreach ((array)($this->data['users'] ?? []) as $user) {
             if (($user['character_id'] ?? '') === $characterId) return $user;
         }
         return null;

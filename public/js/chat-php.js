@@ -67,10 +67,22 @@ if (savedToken && savedUser) {
   loadCharacters();
 }
 
-async function loadCharacters() {
+async function loadCharacters(retry = 0) {
+  loginError.style.display = 'none';
   try {
-    const res = await fetch(API + '/characters.php');
-    const characters = await res.json();
+    const res = await fetch(API + '/characters.php', { cache: 'no-store' });
+    const characters = await parseJsonResponse(res);
+
+    if (!res.ok) {
+      throw new Error(characters.error || ('Server error ' + res.status));
+    }
+    if (!Array.isArray(characters)) {
+      throw new Error('Format data karakter tidak valid');
+    }
+    if (typeof renderCharacterGrid !== 'function') {
+      throw new Error('Komponen karakter belum dimuat. Refresh halaman.');
+    }
+
     renderCharacterGrid(characters, characterGrid, (ch) => {
       selectedCharacter = ch;
       selectedCharName.textContent = ch.display_name
@@ -79,8 +91,25 @@ async function loadCharacters() {
       updateEnterBtn();
     });
   } catch (err) {
-    loginError.textContent = 'Gagal memuat karakter';
+    if (retry < 2) {
+      await new Promise((r) => setTimeout(r, 1500));
+      return loadCharacters(retry + 1);
+    }
+
+    loginError.innerHTML = `Gagal memuat karakter: ${escapeHtml(err.message)}. <button type="button" class="btn btn-outline btn-sm" id="retryCharacters" style="margin-top:8px">Coba Lagi</button>`;
     loginError.style.display = 'block';
+    $('#retryCharacters')?.addEventListener('click', () => loadCharacters());
+
+    if (typeof renderCharacterGrid === 'function' && characterGrid) {
+      const fallback = Object.keys(PIXEL_CHARS).map((id) => ({
+        id,
+        name: PIXEL_CHARS[id].name,
+        title: PIXEL_CHARS[id].title,
+        available: false,
+        display_name: null
+      }));
+      renderCharacterGrid(fallback, characterGrid, () => {});
+    }
   }
 }
 

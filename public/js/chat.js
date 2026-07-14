@@ -49,10 +49,19 @@ if (savedToken && savedUser) {
   loadCharacters();
 }
 
-async function loadCharacters() {
+async function loadCharacters(retry = 0) {
+  loginError.style.display = 'none';
   try {
-    const res = await fetch(API + '/api/characters');
+    const res = await fetch(API + '/api/characters', { cache: 'no-store' });
     const characters = await res.json();
+
+    if (!res.ok) {
+      throw new Error(characters.error || ('Server error ' + res.status));
+    }
+    if (!Array.isArray(characters)) {
+      throw new Error('Format data karakter tidak valid');
+    }
+
     renderCharacterGrid(characters, characterGrid, (ch) => {
       selectedCharacter = ch;
       selectedCharName.textContent = ch.display_name
@@ -61,7 +70,11 @@ async function loadCharacters() {
       updateEnterBtn();
     });
   } catch (err) {
-    loginError.textContent = 'Gagal memuat karakter';
+    if (retry < 2) {
+      await new Promise((r) => setTimeout(r, 1500));
+      return loadCharacters(retry + 1);
+    }
+    loginError.textContent = 'Gagal memuat karakter: ' + err.message;
     loginError.style.display = 'block';
   }
 }

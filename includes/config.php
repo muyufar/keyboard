@@ -3,6 +3,13 @@ define('ROOT_PATH', dirname(__DIR__));
 define('DATA_PATH', ROOT_PATH . '/data');
 define('UPLOADS_PATH', ROOT_PATH . '/uploads');
 
+if (!is_dir(DATA_PATH)) {
+    @mkdir(DATA_PATH, 0755, true);
+}
+if (!is_dir(UPLOADS_PATH)) {
+    @mkdir(UPLOADS_PATH, 0755, true);
+}
+
 define('JWT_SECRET', getenv('JWT_SECRET') ?: 'light-chat-secret-key-2026');
 define('ADMIN_USER', getenv('ADMIN_USER') ?: 'admin');
 define('ADMIN_PASS', getenv('ADMIN_PASS') ?: 'admin123');

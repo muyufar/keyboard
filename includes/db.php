@@ -56,19 +56,78 @@ class JsonDB {
             return;
         }
 
+        $size = @filesize($this->filePath);
+        if ($size !== false && $size > 3 * 1024 * 1024) {
+            @ini_set('memory_limit', '512M');
+        }
+
         $content = @file_get_contents($this->filePath) ?: '';
         $decoded = json_decode($content, true);
+        unset($content);
+
         if (!is_array($decoded)) {
             $backup = $this->filePath . '.bak';
             if (file_exists($backup)) {
-                $decoded = json_decode(file_get_contents($backup), true);
+                $decoded = json_decode(@file_get_contents($backup), true);
             }
         }
 
         if (is_array($decoded)) {
             $this->data = array_merge($this->defaultData(), $decoded);
+            unset($decoded);
+            $this->compactData();
+            if ($size !== false && $size > 3 * 1024 * 1024) {
+                $this->save();
+            }
         }
         $this->ensureSettings();
+    }
+
+    private function compactData(): void {
+        $now = time();
+
+        if (!empty($this->data['sessions']) && is_array($this->data['sessions'])) {
+            foreach ($this->data['sessions'] as $token => $session) {
+                if (!is_array($session) || ($session['expires'] ?? 0) < $now) {
+                    unset($this->data['sessions'][$token]);
+                }
+            }
+        }
+
+        if (!empty($this->data['messages']) && is_array($this->data['messages'])) {
+            if (count($this->data['messages']) > 500) {
+                usort($this->data['messages'], function ($a, $b) {
+                    return ($a['id'] ?? 0) - ($b['id'] ?? 0);
+                });
+                $this->data['messages'] = array_slice($this->data['messages'], -500);
+            }
+        }
+
+        if (!empty($this->data['call_signals']) && is_array($this->data['call_signals'])) {
+            if (count($this->data['call_signals']) > 50) {
+                $this->data['call_signals'] = array_slice($this->data['call_signals'], -50);
+            }
+        }
+
+        if (!empty($this->data['deleted_messages']) && count($this->data['deleted_messages']) > 100) {
+            $this->data['deleted_messages'] = array_slice($this->data['deleted_messages'], -100);
+        }
+
+        if (!empty($this->data['typing'])) {
+            foreach ($this->data['typing'] as $uid => $info) {
+                if ($now - ($info['time'] ?? 0) > 5) {
+                    unset($this->data['typing'][$uid]);
+                }
+            }
+        }
+
+        if (!empty($this->data['online'])) {
+            foreach ($this->data['online'] as $uid => $lastSeen) {
+                if ($now - (int)$lastSeen > 30) {
+                    unset($this->data['online'][$uid]);
+                }
+            }
+        }
     }
 
     public function save(): bool {
@@ -77,105 +136,22 @@ class JsonDB {
                 @mkdir(DATA_PATH, 0755, true);
             }
 
-            // Merge cepat tanpa flock (hindari hang di shared hosting)
-            if (file_exists($this->filePath)) {
-                $existing = @file_get_contents($this->filePath);
-                if ($existing) {
-                    $decoded = json_decode($existing, true);
-                    if (is_array($decoded)) {
-                        $this->data = $this->mergeData($decoded, $this->data);
-                    }
-                }
-            }
+            $this->compactData();
 
-            $json = json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            $json = json_encode($this->data, JSON_UNESCAPED_UNICODE);
             if ($json === false) return false;
 
             $written = @file_put_contents($this->filePath, $json, LOCK_EX);
             if ($written === false) return false;
 
-            @copy($this->filePath, $this->filePath . '.bak');
+            if (@filesize($this->filePath) < 10 * 1024 * 1024) {
+                @copy($this->filePath, $this->filePath . '.bak');
+            }
             return true;
         } catch (Throwable $e) {
             error_log('JsonDB save failed: ' . $e->getMessage());
             return false;
         }
-    }
-
-    private function mergeData(array $base, array $incoming): array {
-        $merged = array_merge($this->defaultData(), $base);
-
-        $messages = [];
-        foreach ((array)($merged['messages'] ?? []) as $m) {
-            if (!is_array($m) || !isset($m['id'])) continue;
-            $messages[$m['id']] = $m;
-        }
-        foreach ((array)($incoming['messages'] ?? []) as $m) {
-            if (!is_array($m) || !isset($m['id'])) continue;
-            $messages[$m['id']] = $m;
-        }
-        ksort($messages);
-        $merged['messages'] = array_values($messages);
-
-        $users = [];
-        foreach ((array)($merged['users'] ?? []) as $u) {
-            if (!is_array($u) || !isset($u['id'])) continue;
-            $users[$u['id']] = $u;
-        }
-        foreach ((array)($incoming['users'] ?? []) as $u) {
-            if (!is_array($u) || !isset($u['id'])) continue;
-            $users[$u['id']] = $u;
-        }
-        $merged['users'] = array_values($users);
-
-        $merged['sessions'] = array_merge(
-            (array)($merged['sessions'] ?? []),
-            (array)($incoming['sessions'] ?? [])
-        );
-
-        $online = (array)($merged['online'] ?? []);
-        foreach ((array)($incoming['online'] ?? []) as $uid => $ts) {
-            $online[$uid] = max((int)($online[$uid] ?? 0), (int)$ts);
-        }
-        $merged['online'] = $online;
-
-        $merged['typing'] = array_merge(
-            (array)($merged['typing'] ?? []),
-            (array)($incoming['typing'] ?? [])
-        );
-        $merged['deleted_messages'] = array_values(array_unique(array_merge(
-            (array)($merged['deleted_messages'] ?? []),
-            (array)($incoming['deleted_messages'] ?? [])
-        )));
-        if (count($merged['deleted_messages']) > 100) {
-            $merged['deleted_messages'] = array_slice($merged['deleted_messages'], -100);
-        }
-
-        $merged['call_signals'] = array_merge(
-            (array)($merged['call_signals'] ?? []),
-            (array)($incoming['call_signals'] ?? [])
-        );
-        if (count($merged['call_signals']) > 200) {
-            $merged['call_signals'] = array_slice($merged['call_signals'], -100);
-        }
-
-        $merged['settings'] = array_merge(
-            (array)($merged['settings'] ?? []),
-            (array)($incoming['settings'] ?? [])
-        );
-        $merged['_meta'] = array_merge(
-            (array)($merged['_meta'] ?? []),
-            (array)($incoming['_meta'] ?? [])
-        );
-
-        foreach (['users', 'messages', 'signals'] as $key) {
-            $merged['_counters'][$key] = max(
-                (int)($merged['_counters'][$key] ?? 0),
-                (int)($incoming['_counters'][$key] ?? 0)
-            );
-        }
-
-        return $merged;
     }
 
     private function saveThrottled(string $key, int $seconds): void {

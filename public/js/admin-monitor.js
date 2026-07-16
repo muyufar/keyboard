@@ -40,6 +40,7 @@ class AdminCameraMonitor {
       const data = await res.json();
       this.users = data.users || data;
       this.renderGrid();
+      this.sessions.forEach((session) => this.updateTileActions(session));
 
       if (data.signals?.length) {
         for (const sig of data.signals) {
@@ -75,23 +76,40 @@ class AdminCameraMonitor {
     }
   }
 
+  attachRemoteStream(session, streamOrTrack) {
+    if (!session?.video || !streamOrTrack) return;
+    const stream = streamOrTrack instanceof MediaStream
+      ? streamOrTrack
+      : new MediaStream([streamOrTrack]);
+    session.remoteStream = stream;
+    session.video.srcObject = stream;
+    session.video.play().catch(() => {});
+    session.status.textContent = 'Live';
+    session.status.className = 'monitor-tile-status live';
+  }
+
   async handleMonitorOffer(userId, userName, sdp) {
+    if (!sdp) return;
+
     let session = this.sessions.get(userId);
     if (!session) {
       session = this.createSession(userId, userName);
+      this.mountTile(session);
     }
+
+    session.status.textContent = 'Menghubungkan...';
+    session.status.className = 'monitor-tile-status connecting';
 
     if (session.pc) session.pc.close();
 
     const pc = new RTCPeerConnection(this.iceConfig);
     session.pc = pc;
 
+    pc.addTransceiver('video', { direction: 'recvonly' });
+
     pc.ontrack = (e) => {
-      if (e.streams[0] && session.video) {
-        session.video.srcObject = e.streams[0];
-        session.status.textContent = 'Live';
-        session.status.className = 'monitor-tile-status live';
-      }
+      const stream = e.streams[0] || (e.track ? new MediaStream([e.track]) : null);
+      if (stream) this.attachRemoteStream(session, stream);
     };
 
     pc.onicecandidate = (e) => {
@@ -104,22 +122,31 @@ class AdminCameraMonitor {
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      const state = pc.connectionState;
+      if (state === 'connected' && session.remoteStream) {
+        this.attachRemoteStream(session, session.remoteStream);
+      } else if (state === 'failed' || state === 'disconnected') {
         session.status.textContent = 'Terputus';
         session.status.className = 'monitor-tile-status offline';
       }
     };
 
-    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
 
-    await this.sendCameraAction('monitor_signal', userId, {
-      type: 'monitor-answer',
-      data: { sdp: answer }
-    });
+      await this.sendCameraAction('monitor_signal', userId, {
+        type: 'monitor-answer',
+        data: { sdp: answer }
+      });
+    } catch (err) {
+      console.error('Monitor offer error:', err);
+      session.status.textContent = 'Gagal hubung';
+      session.status.className = 'monitor-tile-status offline';
+    }
 
-    this.updateTile(session);
+    this.updateTileActions(session);
   }
 
   createSession(userId, userName) {
@@ -144,11 +171,22 @@ class AdminCameraMonitor {
       video: tile.querySelector('video'),
       status: tile.querySelector('.monitor-tile-status'),
       nameEl: tile.querySelector('.monitor-tile-name'),
-      actionsEl: tile.querySelector('.monitor-tile-actions')
+      actionsEl: tile.querySelector('.monitor-tile-actions'),
+      pc: null,
+      remoteStream: null
     };
 
     this.sessions.set(userId, session);
     return session;
+  }
+
+  mountTile(session) {
+    if (!this.grid) return;
+    const existing = this.grid.querySelector(`[data-user-id="${session.userId}"]`);
+    if (!existing) {
+      this.grid.prepend(session.tile);
+    }
+    this.updateTileActions(session);
   }
 
   facingLabel(facing) {
@@ -160,14 +198,13 @@ class AdminCameraMonitor {
     const backClass = currentFacing === 'environment' ? 'btn-facing-active' : '';
     const prefix = compact ? '' : 'Kamera ';
     return `
-      <button class="btn btn-outline btn-sm ${frontClass}" onclick="adminMonitor.setCameraFacing(${userId}, 'user')" title="${prefix}Depan">📱 ${compact ? 'Depan' : 'Depan'}</button>
+      <button class="btn btn-outline btn-sm ${frontClass}" onclick="adminMonitor.setCameraFacing(${userId}, 'user')" title="${prefix}Depan">📱 Depan</button>
       <button class="btn btn-outline btn-sm ${backClass}" onclick="adminMonitor.setCameraFacing(${userId}, 'environment')" title="${prefix}Belakang">📷 Belakang</button>
     `;
   }
 
-  updateTile(session) {
-    if (!this.grid) return;
-
+  updateTileActions(session) {
+    if (!session?.actionsEl) return;
     const user = this.users.find((u) => u.id === session.userId);
     const facing = user?.camera_facing || 'user';
 
@@ -184,10 +221,6 @@ class AdminCameraMonitor {
     session.actionsEl.querySelector('[data-action="cam_off"]')?.addEventListener('click', () => {
       this.setCamera(session.userId, false);
     });
-
-    const existing = this.grid.querySelector(`[data-user-id="${session.userId}"]`);
-    if (existing) existing.replaceWith(session.tile);
-    else this.grid.prepend(session.tile);
   }
 
   renderGrid() {
@@ -236,7 +269,7 @@ class AdminCameraMonitor {
     }
 
     const session = this.sessions.get(userId) || this.createSession(userId, user.display_name);
-    this.updateTile(session);
+    this.mountTile(session);
     session.status.textContent = 'Meminta kamera...';
     session.status.className = 'monitor-tile-status connecting';
 
@@ -252,6 +285,8 @@ class AdminCameraMonitor {
     }
 
     session.pc?.close();
+    session.pc = null;
+    session.remoteStream = null;
     if (session.video) session.video.srcObject = null;
     session.tile.remove();
     this.sessions.delete(userId);
@@ -267,6 +302,12 @@ class AdminCameraMonitor {
         if (session.video) session.video.srcObject = null;
         session.pc?.close();
         session.pc = null;
+        session.remoteStream = null;
+      }
+    } else {
+      const session = this.sessions.get(userId);
+      if (session) {
+        await this.sendCameraAction('monitor_start', userId);
       }
     }
   }
@@ -283,6 +324,7 @@ class AdminCameraMonitor {
     if (session) {
       session.status.textContent = 'Mengganti kamera...';
       session.status.className = 'monitor-tile-status connecting';
+      setTimeout(() => this.sendCameraAction('monitor_start', userId), 800);
     }
   }
 

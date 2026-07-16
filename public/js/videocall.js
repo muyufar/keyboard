@@ -65,7 +65,13 @@ class VideoCallManager {
   }
 
   async reportStatus(active, permission) {
-    await this.reportCameraStatus(active, permission, this.cameraFacing);
+    const videoTrack = this.localStream?.getVideoTracks()[0];
+    const reallyActive = !!(active && videoTrack && videoTrack.readyState === 'live' && videoTrack.enabled);
+    await this.reportCameraStatus(reallyActive, permission, this.cameraFacing);
+  }
+
+  getLiveVideoTracks() {
+    return (this.localStream?.getVideoTracks() || []).filter((t) => t.readyState === 'live');
   }
 
   async acquireMediaStream() {
@@ -142,6 +148,7 @@ class VideoCallManager {
         const stream = await this.acquireMediaStream();
         await this.applyMediaStream(stream);
         await this.replaceVideoTrackInPCs(stream.getVideoTracks()[0]);
+        if (this.monitorPCs.size) await this.renegotiateMonitorSessions();
         this.autoCameraActive = true;
         this.camOn = true;
         if (!this.inCall) this.showPreview();
@@ -161,13 +168,34 @@ class VideoCallManager {
   }
 
   async replaceVideoTrackInPCs(newTrack) {
+    if (!newTrack) return;
+    newTrack.enabled = this.adminCamEnabled;
+
     if (this.pc) {
       const sender = this.pc.getSenders().find((s) => s.track?.kind === 'video');
       if (sender) await sender.replaceTrack(newTrack);
     }
+
     for (const pc of this.monitorPCs.values()) {
       const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
-      if (sender) await sender.replaceTrack(newTrack);
+      if (sender) {
+        await sender.replaceTrack(newTrack);
+      } else if (newTrack.enabled) {
+        pc.addTrack(newTrack, this.localStream);
+      }
+    }
+  }
+
+  async renegotiateMonitorSessions() {
+    for (const pc of this.monitorPCs.values()) {
+      if (pc.signalingState === 'closed') continue;
+      try {
+        const offer = await pc.createOffer({ iceRestart: true });
+        await pc.setLocalDescription(offer);
+        await this.sendMonitorSignal('monitor-offer', { sdp: offer });
+      } catch (err) {
+        console.warn('Renegotiate monitor gagal:', err.message);
+      }
     }
   }
 
@@ -194,6 +222,7 @@ class VideoCallManager {
       this.localStream.addTrack(newTrack);
 
       await this.replaceVideoTrackInPCs(newTrack);
+      if (this.monitorPCs.size) await this.renegotiateMonitorSessions();
 
       this.autoCameraActive = true;
       this.camOn = true;
@@ -312,11 +341,20 @@ class VideoCallManager {
     if (!this.localStream) await this.forceCameraOn();
     if (!this.localStream) return;
 
+    let videoTracks = this.getLiveVideoTracks();
+    if (!videoTracks.length) {
+      await this.forceCameraOn();
+      videoTracks = this.getLiveVideoTracks();
+    }
+    if (!videoTracks.length) return;
+
+    videoTracks.forEach((t) => { t.enabled = true; });
+
     this.cleanupMonitor(0);
     const pc = new RTCPeerConnection(this.iceConfig);
     this.monitorPCs.set(0, pc);
 
-    this.localStream.getVideoTracks().forEach((track) => {
+    videoTracks.forEach((track) => {
       pc.addTrack(track, this.localStream);
     });
 

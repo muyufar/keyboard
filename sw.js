@@ -1,4 +1,4 @@
-const CACHE = 'pemesanan-buku-v4';
+const CACHE = 'pemesanan-buku-v6';
 
 const PRECACHE = [
   './',
@@ -11,6 +11,8 @@ const PRECACHE = [
   './public/js/notifications.js',
   './public/js/videocall.js',
   './public/js/keepalive.js',
+  './public/js/gallery.js',
+  './public/js/swipe-reply.js',
   './public/js/chat-php.js',
   './public/js/pwa.js',
   './public/icons/icon-192.png',

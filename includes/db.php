@@ -330,6 +330,44 @@ class JsonDB {
         return $this->data['deleted_messages'] ?? [];
     }
 
+    public function getGalleryItems(int $limit = 40, ?int $before = null, ?string $type = null): array {
+        $deleted = array_flip($this->data['deleted_messages'] ?? []);
+        $items = [];
+
+        foreach ($this->data['messages'] as $msg) {
+            if (empty($msg['media_url'])) continue;
+            if (isset($deleted[$msg['id']])) continue;
+            if ($type && in_array($type, ['image', 'video', 'audio'], true) && ($msg['media_type'] ?? '') !== $type) {
+                continue;
+            }
+            $items[] = $msg;
+        }
+
+        usort($items, fn($a, $b) => ($b['id'] ?? 0) - ($a['id'] ?? 0));
+
+        if ($before) {
+            $items = array_values(array_filter($items, fn($m) => ($m['id'] ?? 0) < $before));
+        }
+
+        $slice = array_slice($items, 0, $limit);
+        return array_map(fn($m) => $this->enrichGalleryItem($m), $slice);
+    }
+
+    public function enrichGalleryItem(array $msg): array {
+        $user = $this->findUserById($msg['user_id']);
+        return [
+            'id' => $msg['id'],
+            'media_type' => $msg['media_type'] ?? 'file',
+            'media_url' => $msg['media_url'],
+            'media_name' => $msg['media_name'] ?? '',
+            'content' => $msg['content'] ?? null,
+            'created_at' => $msg['created_at'],
+            'user_id' => $msg['user_id'],
+            'display_name' => $user['display_name'] ?? 'User',
+            'avatar_color' => $user['avatar_color'] ?? '#6366f1',
+        ];
+    }
+
     public function createSession(int $userId, bool $isAdmin = false): string {
         $token = bin2hex(random_bytes(32));
         $this->data['sessions'][$token] = [

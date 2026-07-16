@@ -2,6 +2,7 @@ const API = (typeof BASE !== 'undefined' ? BASE : '') + '/api';
 let adminToken = null;
 let allUsers = [];
 let adminMonitor = null;
+let adminGallery = null;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -65,6 +66,7 @@ adminLoginForm.addEventListener('submit', async (e) => {
 $('#adminLogout').addEventListener('click', () => {
   adminMonitor?.stop();
   adminMonitor = null;
+  adminGallery = null;
   localStorage.removeItem('admin_token');
   adminToken = null;
   adminPanel.style.display = 'none';
@@ -84,6 +86,16 @@ function showPanel() {
     });
     window.adminMonitor = adminMonitor;
   }
+  if (!adminGallery && typeof MediaGallery !== 'undefined') {
+    adminGallery = new MediaGallery({
+      apiBase: API,
+      authHeaders: () => authHeaders(),
+      endpoint: '/admin-gallery.php',
+      mode: 'inline'
+    });
+    adminGallery.initInline();
+  }
+
   adminMonitor.start();
 }
 

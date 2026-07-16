@@ -15,6 +15,7 @@ const MESSAGES_INITIAL_LOAD = 100;
 const MESSAGES_MAX_TOTAL = 500;
 let videoCall = null;
 let backgroundKeepAlive = null;
+let mediaGallery = null;
 let replyTo = null;
 let chatInitialized = false;
 let loadMessagesInFlight = null;
@@ -252,6 +253,8 @@ $('#logoutBtn').addEventListener('click', () => {
   hideConnectionBanner();
   backgroundKeepAlive?.stop();
   backgroundKeepAlive = null;
+  mediaGallery?.close();
+  mediaGallery = null;
   videoCall?.cleanup();
   videoCall = null;
   localStorage.removeItem('chat_token');
@@ -331,6 +334,18 @@ function showChat() {
     };
     backgroundKeepAlive.onVisible = () => scheduleResume();
     backgroundKeepAlive.start();
+  }
+
+  if (typeof MediaGallery !== 'undefined') {
+    mediaGallery = new MediaGallery({
+      apiBase: API,
+      authHeaders: () => authHeaders(),
+      endpoint: '/gallery.php'
+    });
+  }
+
+  if (typeof initSwipeToReply === 'function') {
+    initSwipeToReply(messagesContainer, startReply);
   }
 
   loadMessages({ full: true }).catch(() => {});
@@ -790,21 +805,23 @@ function createMessageElement(msg) {
   const replyHtml = buildReplyQuoteHtml(msg.reply_to, isOwn);
   const deleteBtn = isOwn ? `<button class="delete-msg-btn" onclick="deleteMessage(${msg.id})" title="Hapus pesan">✕</button>` : '';
   const replyBtn = `<button class="reply-msg-btn" onclick="startReply(${msg.id})" title="Balas pesan">↩</button>`;
-
-  if (isOwn) {
-    div.innerHTML = `<div class="message-content">
+  const swipeHint = '<span class="message-swipe-hint" aria-hidden="true">↩</span>';
+  const contentInner = `
       ${deleteBtn}${replyBtn}
       <div class="message-header"><span class="message-time">${time}</span><span class="message-sender">Anda</span></div>
-      ${replyHtml}${textHtml}${mediaHtml}
-    </div>`;
+      ${replyHtml}${textHtml}${mediaHtml}`;
+
+  if (isOwn) {
+    div.innerHTML = `<div class="message-swipe-area">${swipeHint}<div class="message-content">${contentInner}
+    </div></div>`;
   } else {
     div.innerHTML = `
       <div class="avatar avatar-sm" style="background:${msg.avatar_color}">${initial}</div>
-      <div class="message-content">
+      <div class="message-swipe-area">${swipeHint}<div class="message-content">
         ${replyBtn}
         <div class="message-header"><span class="message-sender">${escapeHtml(msg.display_name)}</span><span class="message-time">${time}</span></div>
         ${replyHtml}${textHtml}${mediaHtml}
-      </div>`;
+      </div></div>`;
   }
 
   return div;

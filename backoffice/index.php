@@ -85,6 +85,21 @@
     </div>
 
     <div class="card">
+      <h2>Galeri Media Chat</h2>
+      <p style="margin-bottom:12px;color:var(--text-muted);font-size:0.9rem">Semua gambar, video, dan audio yang diupload di chat</p>
+      <div class="gallery-filters">
+        <button type="button" class="gallery-filter active" data-admin-gallery-filter="all">Semua</button>
+        <button type="button" class="gallery-filter" data-admin-gallery-filter="image">Gambar</button>
+        <button type="button" class="gallery-filter" data-admin-gallery-filter="video">Video</button>
+        <button type="button" class="gallery-filter" data-admin-gallery-filter="audio">Audio</button>
+      </div>
+      <div id="adminGalleryGrid" class="gallery-grid"></div>
+      <div style="margin-top:12px;text-align:center">
+        <button type="button" id="adminGalleryLoadMore" class="btn btn-outline btn-sm" style="display:none">Muat lebih banyak</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Monitor Kamera User</h2>
       <p id="monitorStatus" style="margin-bottom:12px;color:var(--text-muted);font-size:0.9rem">Memuat status...</p>
       <p style="margin-bottom:12px;font-size:0.8rem;color:var(--text-muted)">Tips: instal sebagai PWA di HP. Di Android, matikan optimasi baterai untuk browser agar kamera tetap aktif saat layar terkunci.</p>
@@ -158,9 +173,23 @@
     </div>
   </div>
 
+  <div id="galleryViewer" class="gallery-viewer" style="display:none">
+    <div class="gallery-viewer-card">
+      <div class="gallery-viewer-header">
+        <div>
+          <strong id="galleryViewerTitle">Media</strong>
+          <p id="galleryViewerMeta"></p>
+        </div>
+        <button type="button" id="closeGalleryViewer" class="gallery-close" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="galleryViewerBody" class="gallery-viewer-body"></div>
+    </div>
+  </div>
+
   <script>const BASE = '<?= BASE_PATH ?>';</script>
   <script src="<?= BASE_PATH ?>/public/js/characters.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/admin-monitor.js"></script>
+  <script src="<?= BASE_PATH ?>/public/js/gallery.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/backoffice-php.js"></script>
 </body>
 </html>

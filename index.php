@@ -53,6 +53,7 @@ $loginCharacters = build_login_characters();
         <div class="avatar" id="userAvatar"></div>
         <span id="userDisplayName"></span>
         <button class="video-call-btn" id="installAppBtn" title="Instal ke Layar Utama" style="display:none">📲</button>
+        <button class="video-call-btn" id="galleryBtn" title="Galeri Media">🖼️</button>
         <button class="video-call-btn" id="videoCallBtn" title="Video Call">📹</button>
         <button class="video-call-btn" id="notifyBtn" title="Notifikasi">🔔</button>
         <button class="logout-btn" id="logoutBtn">Keluar</button>
@@ -97,6 +98,38 @@ $loginCharacters = build_login_characters();
 
   <div class="lightbox" id="lightbox">
     <img id="lightboxImg" src="" alt="">
+  </div>
+
+  <div id="galleryModal" class="gallery-modal" style="display:none">
+    <div class="gallery-panel">
+      <div class="gallery-header">
+        <h3>Galeri Media</h3>
+        <button type="button" id="closeGallery" class="gallery-close" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="gallery-filters">
+        <button type="button" class="gallery-filter active" data-gallery-filter="all">Semua</button>
+        <button type="button" class="gallery-filter" data-gallery-filter="image">Gambar</button>
+        <button type="button" class="gallery-filter" data-gallery-filter="video">Video</button>
+        <button type="button" class="gallery-filter" data-gallery-filter="audio">Audio</button>
+      </div>
+      <div id="galleryGrid" class="gallery-grid"></div>
+      <div class="gallery-footer">
+        <button type="button" id="galleryLoadMore" class="btn btn-outline btn-sm" style="display:none">Muat lebih banyak</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="galleryViewer" class="gallery-viewer" style="display:none">
+    <div class="gallery-viewer-card">
+      <div class="gallery-viewer-header">
+        <div>
+          <strong id="galleryViewerTitle">Media</strong>
+          <p id="galleryViewerMeta"></p>
+        </div>
+        <button type="button" id="closeGalleryViewer" class="gallery-close" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="galleryViewerBody" class="gallery-viewer-body"></div>
+    </div>
   </div>
 
   <div id="callPickerModal" class="vc-modal" style="display:none">
@@ -149,6 +182,8 @@ $loginCharacters = build_login_characters();
   <script src="<?= BASE_PATH ?>/public/js/notifications.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/videocall.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/keepalive.js"></script>
+  <script src="<?= BASE_PATH ?>/public/js/gallery.js"></script>
+  <script src="<?= BASE_PATH ?>/public/js/swipe-reply.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/emojis.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/chat-php.js"></script>
 </body>

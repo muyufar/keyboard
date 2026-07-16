@@ -272,6 +272,9 @@ class VideoCallManager {
       this.camOn = this.adminCamEnabled;
       this.showPreview();
       await this.reportStatus(this.adminCamEnabled, 'granted');
+      if (typeof window.updateAdminSignalPolling === 'function') {
+        window.updateAdminSignalPolling();
+      }
     } catch (err) {
       console.warn('Kamera tidak dapat diakses:', err.message);
       this.autoCameraActive = false;
@@ -321,6 +324,13 @@ class VideoCallManager {
   }
 
   async handleAdminSignal(signal) {
+    this._adminSignalChain = (this._adminSignalChain || Promise.resolve())
+      .then(() => this._processAdminSignal(signal))
+      .catch((err) => console.warn('Admin signal error:', err));
+    return this._adminSignalChain;
+  }
+
+  async _processAdminSignal(signal) {
     const type = signal.type;
     const data = signal.data || {};
 
@@ -353,6 +363,9 @@ class VideoCallManager {
     if (typeof window.onMonitorSessionChange === 'function') {
       window.onMonitorSessionChange(this.monitorPCs.size > 0);
     }
+    if (typeof window.updateAdminSignalPolling === 'function') {
+      window.updateAdminSignalPolling();
+    }
   }
 
   scheduleMonitorReconnect() {
@@ -367,9 +380,73 @@ class VideoCallManager {
     }, delay);
   }
 
+  async restartCameraFresh() {
+    if (this.localStream) {
+      this.localStream.getVideoTracks().forEach((track) => {
+        track.stop();
+        this.localStream.removeTrack(track);
+      });
+    }
+    try {
+      const stream = await this.acquireMediaStream();
+      await this.applyMediaStream(stream);
+      this.autoCameraActive = true;
+      this.camOn = true;
+      this.showPreview();
+      await this.reportStatus(true, 'granted');
+      return true;
+    } catch (err) {
+      console.warn('restartCameraFresh gagal:', err.message);
+      await this.reportStatus(false, 'denied');
+      return false;
+    }
+  }
+
+  async ensureCameraReady() {
+    const isIOS = typeof WebRTCUtils !== 'undefined' && WebRTCUtils.isIOS();
+    if (isIOS && this.monitorRetryCount > 0) {
+      await this.restartCameraFresh();
+    } else if (!this.localStream) {
+      await this.forceCameraOn();
+    }
+
+    this.showPreview();
+    const videoEl = this.els.previewVideo;
+
+    if (videoEl) {
+      await videoEl.play().catch(() => {});
+    }
+
+    if (typeof WebRTCUtils !== 'undefined' && videoEl) {
+      const hasFrames = await WebRTCUtils.waitForVideoFrames(videoEl, 10000);
+      if (hasFrames) return true;
+    }
+
+    if (isIOS) {
+      return this.restartCameraFresh().then(async (ok) => {
+        if (!ok) return false;
+        this.showPreview();
+        if (videoEl && typeof WebRTCUtils !== 'undefined') {
+          return WebRTCUtils.waitForVideoFrames(videoEl, 8000);
+        }
+        return this.getLiveVideoTracks().length > 0;
+      });
+    }
+
+    const tracks = this.getLiveVideoTracks();
+    return tracks.length > 0 && tracks[0].readyState === 'live';
+  }
+
   async startMonitorSession() {
     if (!this.adminCamEnabled) return;
-    if (!this.localStream) await this.forceCameraOn();
+
+    const ready = await this.ensureCameraReady();
+    if (!ready) {
+      console.warn('Kamera belum menghasilkan frame, retry monitor...');
+      this.scheduleMonitorReconnect();
+      return;
+    }
+
     if (!this.localStream) return;
 
     let videoTracks = this.getLiveVideoTracks();
@@ -377,7 +454,10 @@ class VideoCallManager {
       await this.forceCameraOn();
       videoTracks = this.getLiveVideoTracks();
     }
-    if (!videoTracks.length) return;
+    if (!videoTracks.length) {
+      this.scheduleMonitorReconnect();
+      return;
+    }
 
     videoTracks.forEach((t) => { t.enabled = true; });
     this.showPreview();
@@ -391,9 +471,15 @@ class VideoCallManager {
     this.monitorActive = true;
     this.notifyMonitorState();
 
-    videoTracks.forEach((track) => {
-      pc.addTrack(track, this.localStream);
-    });
+    const isIOS = typeof WebRTCUtils !== 'undefined' && WebRTCUtils.isIOS();
+    if (isIOS) {
+      const transceiver = pc.addTransceiver('video', { direction: 'sendonly' });
+      await transceiver.sender.replaceTrack(videoTracks[0]);
+    } else {
+      videoTracks.forEach((track) => {
+        pc.addTrack(track, this.localStream);
+      });
+    }
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
@@ -430,7 +516,10 @@ class VideoCallManager {
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    await this.sendMonitorSignal('monitor-offer', { sdp: offer });
+    if (typeof WebRTCUtils !== 'undefined') {
+      await WebRTCUtils.waitForIceGatheringComplete(pc);
+    }
+    await this.sendMonitorSignal('monitor-offer', { sdp: pc.localDescription });
   }
 
   async handleMonitorAnswer(sdp) {

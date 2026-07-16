@@ -20,7 +20,7 @@ class AdminCameraMonitor {
   }
 
   getPollDelay() {
-    return this.sessions.size > 0 ? 500 : 1500;
+    return this.sessions.size > 0 ? 250 : 1500;
   }
 
   schedulePoll() {
@@ -102,7 +102,11 @@ class AdminCameraMonitor {
     const markLive = () => {
       session.status.textContent = 'Live';
       session.status.className = 'monitor-tile-status live';
+      this.watchVideoHealth(session);
     };
+
+    session.status.textContent = 'Menghubungkan...';
+    session.status.className = 'monitor-tile-status connecting';
 
     if (typeof WebRTCUtils !== 'undefined') {
       WebRTCUtils.attachVideoStream(session.video, stream, markLive);
@@ -113,10 +117,34 @@ class AdminCameraMonitor {
     }
   }
 
+  watchVideoHealth(session) {
+    clearTimeout(session.blackWatchTimer);
+    session.blackWatchTimer = setTimeout(() => {
+      if (!session?.video || !session.pc) return;
+      if (session.video.videoWidth > 0 && session.video.videoHeight > 0) return;
+
+      session.status.textContent = 'Frame kosong, reconnect...';
+      session.status.className = 'monitor-tile-status connecting';
+      session.pc?.close();
+      session.pc = null;
+      session.remoteStream = null;
+      session.video.srcObject = null;
+
+      this.sendCameraAction('cam_on', session.userId);
+      setTimeout(() => this.sendCameraAction('monitor_start', session.userId), 600);
+    }, 4000);
+  }
+
   async handleMonitorOffer(userId, userName, sdp) {
     if (!sdp) return;
 
     let session = this.sessions.get(userId);
+    if (session?.pc?.connectionState === 'connected'
+      && session.video?.videoWidth > 0
+      && session.video?.videoHeight > 0) {
+      return;
+    }
+
     if (!session) {
       session = this.createSession(userId, userName);
       this.mountTile(session);
@@ -184,10 +212,13 @@ class AdminCameraMonitor {
       }
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      if (typeof WebRTCUtils !== 'undefined') {
+        await WebRTCUtils.waitForIceGatheringComplete(pc);
+      }
 
       await this.sendCameraAction('monitor_signal', userId, {
         type: 'monitor-answer',
-        data: { sdp: answer }
+        data: { sdp: pc.localDescription }
       });
 
       if (session.iceQueue) {
@@ -229,7 +260,8 @@ class AdminCameraMonitor {
       pc: null,
       remoteStream: null,
       iceQueue: null,
-      reconnectTimer: null
+      reconnectTimer: null,
+      blackWatchTimer: null
     };
 
     this.sessions.set(userId, session);
@@ -342,6 +374,7 @@ class AdminCameraMonitor {
     }
 
     clearTimeout(session.reconnectTimer);
+    clearTimeout(session.blackWatchTimer);
     session.pc?.close();
     session.pc = null;
     session.iceQueue = null;

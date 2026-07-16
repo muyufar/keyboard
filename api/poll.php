@@ -21,5 +21,7 @@ jsonResponse([
     'online' => $db->getOnlineCount(),
     'online_users' => $db->getOnlineUsers($user['id']),
     'call_signals' => $db->pullCallSignals($user['id']),
-    'admin_signals' => $db->pullAdminSignals($user['id'])
+    'admin_signals' => (!empty($_GET['skip_admin_signals']) && $_GET['skip_admin_signals'] !== '0')
+        ? []
+        : $db->pullAdminSignals($user['id'])
 ]);

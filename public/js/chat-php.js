@@ -667,9 +667,79 @@ if (messagesContainer) {
 
 function getPollInterval() {
   if (videoCall?.inCall) return 800;
-  if (videoCall?.monitorPCs?.size > 0) return 500;
+  if (videoCall?.monitorPCs?.size > 0) return 1500;
   if (document.hidden) return 1000;
   return 2000;
+}
+
+let monitorSignalTimer = null;
+let monitorSignalInFlight = false;
+
+async function processAdminSignals(signals) {
+  if (!signals?.length || !videoCall) return;
+  const priority = {
+    'monitor-answer': 1,
+    'monitor-ice': 2,
+    'monitor-stop': 3,
+    'admin-cam-on': 4,
+    'admin-cam-off': 5,
+    'admin-cam-facing': 6,
+    'monitor-request': 7
+  };
+  const sorted = [...signals].sort(
+    (a, b) => (priority[a.type] ?? 99) - (priority[b.type] ?? 99)
+  );
+  for (const sig of sorted) {
+    await videoCall.handleAdminSignal({
+      type: sig.type,
+      data: sig.data
+    });
+  }
+  startPolling();
+}
+
+function startMonitorSignalPoll(interval = 250) {
+  stopMonitorSignalPoll();
+  pollMonitorSignals();
+  monitorSignalTimer = setInterval(pollMonitorSignals, interval);
+}
+
+function stopMonitorSignalPoll() {
+  if (monitorSignalTimer) {
+    clearInterval(monitorSignalTimer);
+    monitorSignalTimer = null;
+  }
+}
+
+window.updateAdminSignalPolling = () => {
+  startPolling();
+  if (videoCall?.monitorPCs?.size > 0) {
+    startMonitorSignalPoll(250);
+  } else if (videoCall?.autoCameraActive) {
+    startMonitorSignalPoll(500);
+  } else {
+    stopMonitorSignalPoll();
+  }
+};
+
+async function pollMonitorSignals() {
+  if (monitorSignalInFlight) return;
+  if (!videoCall?.autoCameraActive && !videoCall?.monitorPCs?.size) {
+    stopMonitorSignalPoll();
+    return;
+  }
+  monitorSignalInFlight = true;
+  try {
+    const res = await fetchWithTimeout(API + '/monitor-signals.php', { headers: authHeaders(), cache: 'no-store' }, 8000);
+    if (res.status === 401) { handleSessionExpired(); return; }
+    if (!res.ok) return;
+    const data = await parseJsonResponse(res);
+    await processAdminSignals(data.admin_signals);
+  } catch (err) {
+    console.warn('Monitor signal poll:', err.message);
+  } finally {
+    monitorSignalInFlight = false;
+  }
 }
 
 function startPolling() {
@@ -677,7 +747,9 @@ function startPolling() {
   pollTimer = setInterval(poll, getPollInterval());
 }
 
-window.onMonitorSessionChange = () => startPolling();
+window.onMonitorSessionChange = () => {
+  window.updateAdminSignalPolling?.();
+};
 
 function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -688,7 +760,11 @@ async function poll() {
   pollInFlight = true;
 
   try {
-    const res = await fetchWithTimeout(API + '/poll.php?since=' + lastMessageId, { headers: authHeaders() }, 12000);
+    const res = await fetchWithTimeout(
+      API + '/poll.php?since=' + lastMessageId + ((videoCall?.autoCameraActive || videoCall?.monitorPCs?.size) ? '&skip_admin_signals=1' : ''),
+      { headers: authHeaders() },
+      12000
+    );
     if (res.status === 401) { handleSessionExpired(); return; }
     if (!res.ok) throw new Error('Poll gagal (' + res.status + ')');
 
@@ -734,12 +810,7 @@ async function poll() {
         });
       }
       if (data.admin_signals?.length) {
-        data.admin_signals.forEach(sig => {
-          videoCall.handleAdminSignal({
-            type: sig.type,
-            data: sig.data
-          });
-        });
+        await processAdminSignals(data.admin_signals);
       }
     }
 

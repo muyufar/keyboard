@@ -8,12 +8,46 @@
     return {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        {
+          urls: 'turn:openrelay.metered.ca:80',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: 'turn:openrelay.metered.ca:443',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        }
       ],
+      iceTransportPolicy: 'all',
       bundlePolicy: 'max-bundle',
       rtcpMuxPolicy: 'require',
-      iceCandidatePoolSize: 4
+      iceCandidatePoolSize: 10
     };
+  }
+
+  function waitForIceGatheringComplete(pc, timeoutMs = 10000) {
+    if (!pc || pc.iceGatheringState === 'complete') {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        pc.removeEventListener('icegatheringstatechange', onChange);
+        resolve();
+      };
+      const onChange = () => {
+        if (pc.iceGatheringState === 'complete') done();
+      };
+      const timer = setTimeout(done, timeoutMs);
+      pc.addEventListener('icegatheringstatechange', onChange);
+    });
   }
 
   async function addCandidateSafe(pc, candidate) {
@@ -77,29 +111,58 @@
 
   function attachVideoStream(videoEl, stream, onLive) {
     if (!videoEl || !stream) return;
+
+    const markLiveIfReady = () => {
+      if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+        onLive?.();
+        return true;
+      }
+      return false;
+    };
+
     videoEl.srcObject = stream;
     videoEl.play().catch(() => {});
 
-    const tracks = stream.getVideoTracks();
-    tracks.forEach((track) => {
-      if (track.muted) {
-        track.onunmute = () => {
-          videoEl.srcObject = stream;
-          videoEl.play().catch(() => {});
-          onLive?.();
-        };
-      }
+    if (markLiveIfReady()) return;
+
+    videoEl.onloadeddata = () => markLiveIfReady();
+    videoEl.onresize = () => markLiveIfReady();
+
+    stream.getVideoTracks().forEach((track) => {
+      track.onunmute = () => {
+        videoEl.srcObject = stream;
+        videoEl.play().catch(() => {});
+        setTimeout(markLiveIfReady, 50);
+      };
     });
 
-    onLive?.();
+    let attempts = 0;
+    const poll = setInterval(() => {
+      if (markLiveIfReady() || ++attempts >= 40) {
+        clearInterval(poll);
+      }
+    }, 200);
+  }
+
+  async function waitForVideoFrames(videoEl, timeoutMs = 10000) {
+    if (!videoEl) return false;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) return true;
+      await videoEl.play?.().catch(() => {});
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    return videoEl.videoWidth > 0 && videoEl.videoHeight > 0;
   }
 
   window.WebRTCUtils = {
     isIOS,
     getIceConfig,
+    waitForIceGatheringComplete,
     createIceQueue,
     preferH264,
     attachVideoStream,
-    addCandidateSafe
+    addCandidateSafe,
+    waitForVideoFrames
   };
 })();

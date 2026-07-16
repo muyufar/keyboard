@@ -49,7 +49,19 @@
   async function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     try {
-      await navigator.serviceWorker.register(swUrl, { scope });
+      const reg = await navigator.serviceWorker.register(swUrl, { scope });
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: 'skipWaiting' });
+      }
+      reg.addEventListener('updatefound', () => {
+        const worker = reg.installing;
+        if (!worker) return;
+        worker.addEventListener('statechange', () => {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+            worker.postMessage({ type: 'skipWaiting' });
+          }
+        });
+      });
     } catch (err) {
       console.warn('Service worker gagal didaftarkan:', err);
     }

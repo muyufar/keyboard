@@ -86,11 +86,28 @@ async function parseJsonResponse(res) {
 
 const savedToken = localStorage.getItem('chat_token');
 const savedUser = localStorage.getItem('chat_user');
-if (savedToken && savedUser) {
-  currentUser = JSON.parse(savedUser);
-  showChat();
+
+function bootApp() {
+  if (!savedToken || !savedUser) {
+    loadCharacters();
+    return;
+  }
+  try {
+    currentUser = JSON.parse(savedUser);
+    if (!currentUser?.id) throw new Error('Data user tidak valid');
+    showChat();
+  } catch {
+    localStorage.removeItem('chat_token');
+    localStorage.removeItem('chat_user');
+    currentUser = null;
+    loadCharacters();
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootApp);
 } else {
-  loadCharacters();
+  bootApp();
 }
 
 async function loadCharacters(retry = 0) {
@@ -316,12 +333,12 @@ function showChat() {
     backgroundKeepAlive.start();
   }
 
-  loadMessages({ full: true }).then(() => {
-    if (!pollingActive) {
-      startPolling();
-      pollingActive = true;
-    }
-  });
+  loadMessages({ full: true }).catch(() => {});
+
+  startPolling();
+  pollingActive = true;
+  poll();
+
   ChatNotify.init();
 }
 
@@ -357,6 +374,50 @@ async function resumeSession() {
   }
 }
 
+function showMessagesLoading(show) {
+  if (!messagesContainer) return;
+  let el = document.getElementById('messagesLoading');
+  if (show) {
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'messagesLoading';
+      el.className = 'messages-loading';
+      el.textContent = 'Memuat pesan...';
+      messagesContainer.appendChild(el);
+    }
+    el.style.display = 'flex';
+  } else if (el) {
+    el.style.display = 'none';
+  }
+  const err = document.getElementById('messagesError');
+  if (err) err.style.display = 'none';
+}
+
+function showMessagesError(message) {
+  if (!messagesContainer) return;
+  showMessagesLoading(false);
+
+  let el = document.getElementById('messagesError');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'messagesError';
+    el.className = 'messages-error';
+    el.innerHTML = '<p id="messagesErrorText"></p><button type="button" class="btn btn-outline btn-sm" id="messagesRetryBtn">Coba Lagi</button>';
+    messagesContainer.appendChild(el);
+    el.querySelector('#messagesRetryBtn')?.addEventListener('click', () => {
+      loadMessages({ full: true, force: true });
+    });
+  }
+  const text = el.querySelector('#messagesErrorText');
+  if (text) text.textContent = message || 'Gagal memuat pesan.';
+  el.style.display = 'flex';
+}
+
+function hideMessagesError() {
+  const el = document.getElementById('messagesError');
+  if (el) el.style.display = 'none';
+}
+
 function ensureConnectionBanner() {
   let banner = document.getElementById('connectionBanner');
   if (!banner) {
@@ -386,6 +447,10 @@ function hideConnectionBanner() {
 function handleSessionExpired() {
   stopPolling();
   showConnectionBanner('Sesi berakhir. Silakan login ulang.', true);
+  showMessagesLoading(false);
+  if (!messagesContainer.querySelectorAll('.message').length) {
+    showMessagesError('Sesi berakhir. Tekan Keluar lalu login kembali.');
+  }
 }
 
 window.onVideoCallStart = () => startPolling();
@@ -487,12 +552,21 @@ async function loadOlderMessages() {
 
 async function loadMessages(options = {}) {
   const full = options.full !== false;
-  if (loadMessagesInFlight) return loadMessagesInFlight;
+  if (loadMessagesInFlight && !options.force) return loadMessagesInFlight;
 
   loadMessagesInFlight = doLoadMessages(full).finally(() => {
     loadMessagesInFlight = null;
   });
   return loadMessagesInFlight;
+}
+
+function showEmptyMessagesHint() {
+  if (document.getElementById('messagesEmpty')) return;
+  const el = document.createElement('div');
+  el.id = 'messagesEmpty';
+  el.className = 'messages-empty';
+  el.textContent = 'Belum ada pesan. Mulai percakapan!';
+  messagesContainer.appendChild(el);
 }
 
 async function doLoadMessages(full) {
@@ -503,10 +577,11 @@ async function doLoadMessages(full) {
       await poll();
       pollErrors = 0;
       hideConnectionBanner();
+      hideMessagesError();
       return true;
     }
 
-    messagesContainer.querySelectorAll('.message').forEach((el) => el.remove());
+    showMessagesLoading(true);
 
     let allMessages = [];
     let before = null;
@@ -515,7 +590,13 @@ async function doLoadMessages(full) {
 
     while (allMessages.length < maxLoad) {
       const batch = await fetchMessagePage(before);
-      if (!batch) return false;
+      if (!batch) {
+        showMessagesLoading(false);
+        if (!messagesContainer.querySelectorAll('.message').length) {
+          showMessagesError('Sesi tidak valid atau gagal memuat pesan.');
+        }
+        return false;
+      }
       if (!batch.length) {
         lastBatchLen = 0;
         break;
@@ -528,6 +609,11 @@ async function doLoadMessages(full) {
       before = batch[0].id;
     }
 
+    messagesContainer.querySelectorAll('.message').forEach((el) => el.remove());
+    document.getElementById('messagesEmpty')?.remove();
+    showMessagesLoading(false);
+    hideMessagesError();
+
     allMessages.forEach((msg) => appendMessage(msg));
 
     if (allMessages.length) {
@@ -535,6 +621,7 @@ async function doLoadMessages(full) {
       hasMoreOlder = lastBatchLen >= MESSAGES_PAGE_SIZE;
     } else {
       hasMoreOlder = false;
+      showEmptyMessagesHint();
     }
 
     updateLoadOlderUI(false);
@@ -545,7 +632,12 @@ async function doLoadMessages(full) {
   } catch (err) {
     pollErrors++;
     console.error('Gagal memuat pesan:', err);
-    showConnectionBanner('Koneksi terganggu. Mencoba menyambung kembali...');
+    showMessagesLoading(false);
+    if (!messagesContainer.querySelectorAll('.message').length) {
+      showMessagesError(err.message || 'Koneksi terganggu.');
+    } else {
+      showConnectionBanner('Koneksi terganggu. Mencoba menyambung kembali...');
+    }
     return false;
   }
 }
@@ -585,6 +677,9 @@ async function poll() {
     const data = await parseJsonResponse(res);
 
     if (data.messages?.length) {
+      hideMessagesError();
+      showMessagesLoading(false);
+      document.getElementById('messagesEmpty')?.remove();
       data.messages.forEach(msg => {
         if (!document.querySelector(`[data-id="${msg.id}"]`)) {
           appendMessage(msg);

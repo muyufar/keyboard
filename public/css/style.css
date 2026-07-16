@@ -272,6 +272,27 @@ body {
   flex-shrink: 0;
 }
 
+.messages-loading,
+.messages-error,
+.messages-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 20px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  flex: 1;
+  text-align: center;
+}
+
+.messages-error p {
+  margin: 0;
+  max-width: 280px;
+  line-height: 1.5;
+}
+
 .messages-container::-webkit-scrollbar {
   width: 6px;
 }

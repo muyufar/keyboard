@@ -188,6 +188,7 @@
 
   <script>const BASE = '<?= BASE_PATH ?>';</script>
   <script src="<?= BASE_PATH ?>/public/js/characters.js"></script>
+  <script src="<?= BASE_PATH ?>/public/js/webrtc-utils.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/admin-monitor.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/gallery.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/backoffice-php.js"></script>

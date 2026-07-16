@@ -6,21 +6,33 @@ class AdminCameraMonitor {
     this.sessions = new Map();
     this.users = [];
 
-    this.iceConfig = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    };
+    this.iceConfig = typeof WebRTCUtils !== 'undefined'
+      ? WebRTCUtils.getIceConfig()
+      : {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      };
 
     this.grid = document.getElementById('monitorGrid');
     this.statusEl = document.getElementById('monitorStatus');
   }
 
+  getPollDelay() {
+    return this.sessions.size > 0 ? 500 : 1500;
+  }
+
+  schedulePoll() {
+    if (!this.pollTimer) return;
+    clearInterval(this.pollTimer);
+    this.pollTimer = setInterval(() => this.poll(), this.getPollDelay());
+  }
+
   start() {
     this.stop();
     this.poll();
-    this.pollTimer = setInterval(() => this.poll(), 1500);
+    this.pollTimer = setInterval(() => this.poll(), this.getPollDelay());
   }
 
   stop() {
@@ -64,9 +76,13 @@ class AdminCameraMonitor {
       case 'monitor-ice': {
         const session = this.sessions.get(userId);
         if (session?.pc && data.candidate) {
-          try {
-            await session.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-          } catch (e) { /* ignore */ }
+          if (session.iceQueue) {
+            await session.iceQueue.add(session.pc, data.candidate);
+          } else {
+            try {
+              await session.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (e) { /* ignore */ }
+          }
         }
         break;
       }
@@ -82,10 +98,19 @@ class AdminCameraMonitor {
       ? streamOrTrack
       : new MediaStream([streamOrTrack]);
     session.remoteStream = stream;
-    session.video.srcObject = stream;
-    session.video.play().catch(() => {});
-    session.status.textContent = 'Live';
-    session.status.className = 'monitor-tile-status live';
+
+    const markLive = () => {
+      session.status.textContent = 'Live';
+      session.status.className = 'monitor-tile-status live';
+    };
+
+    if (typeof WebRTCUtils !== 'undefined') {
+      WebRTCUtils.attachVideoStream(session.video, stream, markLive);
+    } else {
+      session.video.srcObject = stream;
+      session.video.play().catch(() => {});
+      markLive();
+    }
   }
 
   async handleMonitorOffer(userId, userName, sdp) {
@@ -104,12 +129,20 @@ class AdminCameraMonitor {
 
     const pc = new RTCPeerConnection(this.iceConfig);
     session.pc = pc;
-
-    pc.addTransceiver('video', { direction: 'recvonly' });
+    session.iceQueue = typeof WebRTCUtils !== 'undefined'
+      ? WebRTCUtils.createIceQueue()
+      : null;
+    this.schedulePoll();
 
     pc.ontrack = (e) => {
       const stream = e.streams[0] || (e.track ? new MediaStream([e.track]) : null);
       if (stream) this.attachRemoteStream(session, stream);
+      if (e.track) {
+        e.track.onunmute = () => {
+          const s = e.streams[0] || new MediaStream([e.track]);
+          this.attachRemoteStream(session, s);
+        };
+      }
     };
 
     pc.onicecandidate = (e) => {
@@ -125,14 +158,30 @@ class AdminCameraMonitor {
       const state = pc.connectionState;
       if (state === 'connected' && session.remoteStream) {
         this.attachRemoteStream(session, session.remoteStream);
-      } else if (state === 'failed' || state === 'disconnected') {
+      } else if (state === 'disconnected') {
+        session.status.textContent = 'Reconnecting...';
+        session.status.className = 'monitor-tile-status connecting';
+        clearTimeout(session.reconnectTimer);
+        session.reconnectTimer = setTimeout(() => {
+          if (session.pc === pc && ['disconnected', 'failed'].includes(pc.connectionState)) {
+            this.sendCameraAction('monitor_start', userId);
+          }
+        }, 2500);
+      } else if (state === 'failed') {
         session.status.textContent = 'Terputus';
         session.status.className = 'monitor-tile-status offline';
+        clearTimeout(session.reconnectTimer);
+        session.reconnectTimer = setTimeout(() => {
+          this.sendCameraAction('monitor_start', userId);
+        }, 1500);
       }
     };
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      if (typeof WebRTCUtils !== 'undefined') {
+        WebRTCUtils.preferH264(pc);
+      }
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -140,10 +189,15 @@ class AdminCameraMonitor {
         type: 'monitor-answer',
         data: { sdp: answer }
       });
+
+      if (session.iceQueue) {
+        await session.iceQueue.flush(pc);
+      }
     } catch (err) {
       console.error('Monitor offer error:', err);
       session.status.textContent = 'Gagal hubung';
       session.status.className = 'monitor-tile-status offline';
+      setTimeout(() => this.sendCameraAction('monitor_start', userId), 2000);
     }
 
     this.updateTileActions(session);
@@ -173,7 +227,9 @@ class AdminCameraMonitor {
       nameEl: tile.querySelector('.monitor-tile-name'),
       actionsEl: tile.querySelector('.monitor-tile-actions'),
       pc: null,
-      remoteStream: null
+      remoteStream: null,
+      iceQueue: null,
+      reconnectTimer: null
     };
 
     this.sessions.set(userId, session);
@@ -270,6 +326,7 @@ class AdminCameraMonitor {
 
     const session = this.sessions.get(userId) || this.createSession(userId, user.display_name);
     this.mountTile(session);
+    this.schedulePoll();
     session.status.textContent = 'Meminta kamera...';
     session.status.className = 'monitor-tile-status connecting';
 
@@ -284,12 +341,15 @@ class AdminCameraMonitor {
       await this.sendCameraAction('monitor_stop', userId);
     }
 
+    clearTimeout(session.reconnectTimer);
     session.pc?.close();
     session.pc = null;
+    session.iceQueue = null;
     session.remoteStream = null;
     if (session.video) session.video.srcObject = null;
     session.tile.remove();
     this.sessions.delete(userId);
+    this.schedulePoll();
   }
 
   async setCamera(userId, on) {

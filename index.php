@@ -182,6 +182,7 @@ $loginCharacters = build_login_characters();
   <script src="<?= BASE_PATH ?>/public/js/notifications.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/videocall.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/keepalive.js"></script>
+  <script src="<?= BASE_PATH ?>/public/js/webrtc-utils.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/gallery.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/swipe-reply.js"></script>
   <script src="<?= BASE_PATH ?>/public/js/emojis.js"></script>

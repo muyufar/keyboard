@@ -1,4 +1,4 @@
-const CACHE = 'pemesanan-buku-v6';
+const CACHE = 'pemesanan-buku-v7';
 
 const PRECACHE = [
   './',
@@ -10,6 +10,7 @@ const PRECACHE = [
   './public/js/emojis.js',
   './public/js/notifications.js',
   './public/js/videocall.js',
+  './public/js/webrtc-utils.js',
   './public/js/keepalive.js',
   './public/js/gallery.js',
   './public/js/swipe-reply.js',

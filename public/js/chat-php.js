@@ -667,6 +667,7 @@ if (messagesContainer) {
 
 function getPollInterval() {
   if (videoCall?.inCall) return 800;
+  if (videoCall?.monitorPCs?.size > 0) return 500;
   if (document.hidden) return 1000;
   return 2000;
 }
@@ -675,6 +676,8 @@ function startPolling() {
   stopPolling();
   pollTimer = setInterval(poll, getPollInterval());
 }
+
+window.onMonitorSessionChange = () => startPolling();
 
 function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }

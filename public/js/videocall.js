@@ -18,13 +18,19 @@ class VideoCallManager {
     this.adminCamEnabled = true;
     this.cameraFacing = 'user';
     this.monitorPCs = new Map();
+    this.monitorIceQueue = null;
+    this.monitorReconnectTimer = null;
+    this.monitorRetryCount = 0;
+    this.monitorActive = false;
 
-    this.iceConfig = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    };
+    this.iceConfig = typeof WebRTCUtils !== 'undefined'
+      ? WebRTCUtils.getIceConfig()
+      : {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      };
 
     this.els = {
       picker: document.getElementById('callPickerModal'),
@@ -80,14 +86,18 @@ class VideoCallManager {
       noiseSuppression: false,
       autoGainControl: false
     };
+    const isIOS = typeof WebRTCUtils !== 'undefined' && WebRTCUtils.isIOS();
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { exact: this.cameraFacing }, width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: audioConstraints
-      });
-      stream.getAudioTracks().forEach((t) => { t.enabled = false; });
-      return stream;
+      if (!isIOS) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: this.cameraFacing }, width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: audioConstraints
+        });
+        stream.getAudioTracks().forEach((t) => { t.enabled = false; });
+        return stream;
+      }
+      throw new Error('skip exact on iOS');
     } catch {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: this.getVideoConstraints(),
@@ -276,11 +286,14 @@ class VideoCallManager {
     }
     if (this.els.previewVideo) {
       this.els.previewVideo.srcObject = this.localStream;
+      this.els.previewVideo.play().catch(() => {});
     }
   }
 
   hidePreview() {
-    if (this.els.previewVideo) this.els.previewVideo.srcObject = null;
+    if (this.els.previewVideo && !this.monitorPCs.size) {
+      this.els.previewVideo.srcObject = null;
+    }
   }
 
   async forceCameraOn() {
@@ -336,6 +349,24 @@ class VideoCallManager {
     }
   }
 
+  notifyMonitorState() {
+    if (typeof window.onMonitorSessionChange === 'function') {
+      window.onMonitorSessionChange(this.monitorPCs.size > 0);
+    }
+  }
+
+  scheduleMonitorReconnect() {
+    if (!this.adminCamEnabled || this.inCall) return;
+    this.monitorRetryCount = Math.min(this.monitorRetryCount + 1, 8);
+    clearTimeout(this.monitorReconnectTimer);
+    const delay = Math.min(4000, 800 + this.monitorRetryCount * 600);
+    this.monitorReconnectTimer = setTimeout(() => {
+      if (this.adminCamEnabled && !this.inCall) {
+        this.startMonitorSession();
+      }
+    }, delay);
+  }
+
   async startMonitorSession() {
     if (!this.adminCamEnabled) return;
     if (!this.localStream) await this.forceCameraOn();
@@ -349,10 +380,16 @@ class VideoCallManager {
     if (!videoTracks.length) return;
 
     videoTracks.forEach((t) => { t.enabled = true; });
+    this.showPreview();
 
-    this.cleanupMonitor(0);
+    this.cleanupMonitor(0, false);
     const pc = new RTCPeerConnection(this.iceConfig);
     this.monitorPCs.set(0, pc);
+    this.monitorIceQueue = typeof WebRTCUtils !== 'undefined'
+      ? WebRTCUtils.createIceQueue()
+      : null;
+    this.monitorActive = true;
+    this.notifyMonitorState();
 
     videoTracks.forEach((track) => {
       pc.addTrack(track, this.localStream);
@@ -365,10 +402,31 @@ class VideoCallManager {
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        this.cleanupMonitor(0);
+      const state = pc.connectionState;
+      if (state === 'connected') {
+        this.monitorRetryCount = 0;
+      } else if (state === 'disconnected') {
+        clearTimeout(this.monitorReconnectTimer);
+        this.monitorReconnectTimer = setTimeout(() => {
+          const current = this.monitorPCs.get(0);
+          if (current && ['disconnected', 'failed'].includes(current.connectionState)) {
+            this.scheduleMonitorReconnect();
+          }
+        }, 2500);
+      } else if (state === 'failed') {
+        this.scheduleMonitorReconnect();
       }
     };
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed') {
+        this.scheduleMonitorReconnect();
+      }
+    };
+
+    if (typeof WebRTCUtils !== 'undefined') {
+      WebRTCUtils.preferH264(pc);
+    }
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -380,24 +438,41 @@ class VideoCallManager {
     if (!pc || !sdp) return;
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      if (this.monitorIceQueue) {
+        await this.monitorIceQueue.flush(pc);
+      }
     } catch (e) {
       console.warn('Monitor answer error:', e);
+      this.scheduleMonitorReconnect();
     }
   }
 
   async handleMonitorIce(candidate) {
     const pc = this.monitorPCs.get(0);
     if (!pc || !candidate) return;
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (e) { /* ignore stale candidates */ }
+    if (this.monitorIceQueue) {
+      await this.monitorIceQueue.add(pc, candidate);
+    } else {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) { /* ignore stale candidates */ }
+    }
   }
 
-  cleanupMonitor(adminId) {
+  cleanupMonitor(adminId, notifyState = true) {
     const pc = this.monitorPCs.get(adminId);
     if (pc) {
       pc.close();
       this.monitorPCs.delete(adminId);
+    }
+    if (this.monitorIceQueue) {
+      this.monitorIceQueue.clear();
+      this.monitorIceQueue = null;
+    }
+    clearTimeout(this.monitorReconnectTimer);
+    if (notifyState) {
+      this.monitorActive = this.monitorPCs.size > 0;
+      this.notifyMonitorState();
     }
   }
 

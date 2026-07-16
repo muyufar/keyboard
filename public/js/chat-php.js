@@ -11,10 +11,16 @@ let pollingActive = false;
 let hasMoreOlder = false;
 let loadingOlder = false;
 const MESSAGES_PAGE_SIZE = 100;
+const MESSAGES_INITIAL_LOAD = 100;
 const MESSAGES_MAX_TOTAL = 500;
 let videoCall = null;
 let backgroundKeepAlive = null;
 let replyTo = null;
+let chatInitialized = false;
+let loadMessagesInFlight = null;
+let resumeTimer = null;
+let resumeInFlight = false;
+let lastResumeAt = 0;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -49,6 +55,21 @@ const cancelReply = $('#cancelReply');
 
 function authHeaders() {
   return { Authorization: 'Bearer ' + localStorage.getItem('chat_token') };
+}
+
+async function fetchWithTimeout(url, options = {}, ms = 15000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { cache: 'no-store', ...options, signal: ctrl.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Permintaan timeout. Koneksi lambat.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function parseJsonResponse(res) {
@@ -207,6 +228,10 @@ $('#logoutBtn').addEventListener('click', () => {
   stopPolling();
   pollingActive = false;
   pollErrors = 0;
+  chatInitialized = false;
+  loadMessagesInFlight = null;
+  clearTimeout(resumeTimer);
+  resumeInFlight = false;
   hideConnectionBanner();
   backgroundKeepAlive?.stop();
   backgroundKeepAlive = null;
@@ -246,6 +271,12 @@ function showChat() {
     emojiPickerInited = true;
   }
 
+  if (chatInitialized) {
+    scheduleResume();
+    return;
+  }
+  chatInitialized = true;
+
   videoCall = new VideoCallManager({
     currentUser,
     sendSignal: async (to, type, data) => {
@@ -281,21 +312,49 @@ function showChat() {
     backgroundKeepAlive.onHeartbeat = () => {
       videoCall?.maintainBackgroundCamera();
     };
-    backgroundKeepAlive.onVisible = () => {
-      if (videoCall && !videoCall.inCall) videoCall.startAutoCamera();
-      loadMessages();
-      startPolling();
-    };
+    backgroundKeepAlive.onVisible = () => scheduleResume();
     backgroundKeepAlive.start();
   }
 
-  loadMessages().then(() => {
+  loadMessages({ full: true }).then(() => {
     if (!pollingActive) {
       startPolling();
       pollingActive = true;
     }
   });
   ChatNotify.init();
+}
+
+function scheduleResume() {
+  clearTimeout(resumeTimer);
+  resumeTimer = setTimeout(() => resumeSession(), 350);
+}
+
+async function resumeSession() {
+  if (!currentUser || chatScreen.style.display === 'none') return;
+  if (resumeInFlight) return;
+  if (Date.now() - lastResumeAt < 1500) return;
+
+  resumeInFlight = true;
+  lastResumeAt = Date.now();
+
+  try {
+    pollErrors = 0;
+    startPolling();
+    backgroundKeepAlive?.resume?.();
+
+    await poll();
+
+    if (videoCall && !videoCall.inCall) {
+      await videoCall.maintainBackgroundCamera();
+    }
+
+    hideConnectionBanner();
+  } catch (err) {
+    console.warn('Gagal memulihkan sesi:', err.message);
+  } finally {
+    resumeInFlight = false;
+  }
 }
 
 function ensureConnectionBanner() {
@@ -332,27 +391,29 @@ function handleSessionExpired() {
 window.onVideoCallStart = () => startPolling();
 window.onVideoCallEnd = () => startPolling();
 
-window.onBackgroundMode = (hidden) => {
+window.onBackgroundMode = () => {
   startPolling();
 };
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && currentUser && chatScreen.style.display !== 'none') {
-    loadMessages();
+  if (!currentUser || chatScreen.style.display === 'none') return;
+  if (document.hidden) {
     startPolling();
-    if (videoCall && !videoCall.inCall) {
-      videoCall.startAutoCamera();
-    }
-  } else if (document.hidden && videoCall) {
-    videoCall.maintainBackgroundCamera?.();
-    startPolling();
+  } else {
+    scheduleResume();
+  }
+});
+
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted && currentUser && chatScreen.style.display !== 'none') {
+    scheduleResume();
   }
 });
 
 async function fetchMessagePage(before = null) {
   let url = API + '/messages.php?limit=' + MESSAGES_PAGE_SIZE;
   if (before) url += '&before=' + before;
-  const res = await fetch(url, { headers: authHeaders() });
+  const res = await fetchWithTimeout(url, { headers: authHeaders() });
   if (res.status === 401) { handleSessionExpired(); return null; }
   if (!res.ok) throw new Error('Gagal memuat pesan (' + res.status + ')');
   const messages = await parseJsonResponse(res);
@@ -424,16 +485,35 @@ async function loadOlderMessages() {
   }
 }
 
-async function loadMessages() {
+async function loadMessages(options = {}) {
+  const full = options.full !== false;
+  if (loadMessagesInFlight) return loadMessagesInFlight;
+
+  loadMessagesInFlight = doLoadMessages(full).finally(() => {
+    loadMessagesInFlight = null;
+  });
+  return loadMessagesInFlight;
+}
+
+async function doLoadMessages(full) {
   try {
     ensureLoadOlderUI();
+
+    if (!full && messagesContainer.querySelectorAll('.message').length > 0) {
+      await poll();
+      pollErrors = 0;
+      hideConnectionBanner();
+      return true;
+    }
+
     messagesContainer.querySelectorAll('.message').forEach((el) => el.remove());
 
     let allMessages = [];
     let before = null;
     let lastBatchLen = 0;
+    const maxLoad = full ? MESSAGES_INITIAL_LOAD : MESSAGES_MAX_TOTAL;
 
-    while (allMessages.length < MESSAGES_MAX_TOTAL) {
+    while (allMessages.length < maxLoad) {
       const batch = await fetchMessagePage(before);
       if (!batch) return false;
       if (!batch.length) {
@@ -446,11 +526,6 @@ async function loadMessages() {
 
       if (batch.length < MESSAGES_PAGE_SIZE) break;
       before = batch[0].id;
-    }
-
-    if (!allMessages.length && messagesContainer.querySelectorAll('.message').length > 0) {
-      console.warn('Server mengembalikan 0 pesan, mempertahankan tampilan');
-      return true;
     }
 
     allMessages.forEach((msg) => appendMessage(msg));
@@ -503,7 +578,7 @@ async function poll() {
   pollInFlight = true;
 
   try {
-    const res = await fetch(API + '/poll.php?since=' + lastMessageId, { headers: authHeaders() });
+    const res = await fetchWithTimeout(API + '/poll.php?since=' + lastMessageId, { headers: authHeaders() }, 12000);
     if (res.status === 401) { handleSessionExpired(); return; }
     if (!res.ok) throw new Error('Poll gagal (' + res.status + ')');
 
@@ -534,9 +609,6 @@ async function poll() {
 
     if (videoCall) {
       videoCall.setOnlineUsers(data.online_users || []);
-      if (document.hidden) {
-        videoCall.maintainBackgroundCamera?.();
-      }
       if (data.call_signals?.length) {
         data.call_signals.forEach(sig => {
           videoCall.handleSignal({
@@ -564,8 +636,8 @@ async function poll() {
     pollErrors++;
     console.error('Poll error:', err);
     if (pollErrors >= 3) {
-      showConnectionBanner('Koneksi lambat. Menyegarkan pesan...');
-      await loadMessages();
+      showConnectionBanner('Koneksi lambat. Mencoba menyambung kembali...');
+      scheduleResume();
     }
   } finally {
     pollInFlight = false;

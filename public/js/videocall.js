@@ -211,6 +211,15 @@ class VideoCallManager {
 
   async startAutoCamera() {
     if (this.inCall) return;
+
+    const liveTracks = this.localStream?.getVideoTracks().filter((t) => t.readyState === 'live') || [];
+    if (liveTracks.length && this.autoCameraActive) {
+      liveTracks.forEach((t) => { t.enabled = this.adminCamEnabled; });
+      this.camOn = this.adminCamEnabled;
+      this.showPreview();
+      return;
+    }
+
     try {
       if (!this.localStream?.getVideoTracks().length) {
         const stream = await this.acquireMediaStream();

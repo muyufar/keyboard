@@ -1,4 +1,4 @@
-const CACHE = 'pemesanan-buku-v2';
+const CACHE = 'pemesanan-buku-v3';
 
 const PRECACHE = [
   './',

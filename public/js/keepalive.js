@@ -161,22 +161,19 @@
           window.onBackgroundMode(true);
         }
       } else {
-        this.acquireWakeLock();
-        this.startSilentAudio();
-        if (typeof window.onBackgroundMode === 'function') {
-          window.onBackgroundMode(false);
-        }
-        if (typeof this.onVisible === 'function') {
-          this.onVisible();
-        }
+        this.resume();
       }
     }
 
     handlePageShow() {
       if (!this.active) return;
+      this.resume();
+    }
+
+    resume() {
       this.startSilentAudio();
       this.acquireWakeLock();
-      if (typeof this.onVisible === 'function') {
+      if (!document.hidden && typeof this.onVisible === 'function') {
         this.onVisible();
       }
     }
